@@ -26,6 +26,10 @@
 		{
 			"name": "RF95_slave_hello_world",
 			"path": "master_slave_hello_world\\RF95_slave_hello_world"
+		},
+		{
+			"name": "ttgo_intial_test",
+			"path": "ttgo_intial_test"
 		}
 	],
 	"settings": {}
