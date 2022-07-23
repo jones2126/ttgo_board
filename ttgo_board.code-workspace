@@ -2,6 +2,10 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"name": "220723-113302-arduino-blink",
+			"path": "..\\..\\PlatformIO\\Projects\\220723-113302-arduino-blink"
 		}
 	],
 	"settings": {}
