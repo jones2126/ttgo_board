@@ -10,6 +10,22 @@
 		{
 			"name": "master_slave_hello_world",
 			"path": "master_slave_hello_world"
+		},
+		{
+			"name": "RadioLib_master_hello_world",
+			"path": "master_slave_hello_world\\RadioLib_master_hello_world"
+		},
+		{
+			"name": "RadioLib_slave_hello_world",
+			"path": "master_slave_hello_world\\RadioLib_slave_hello_world"
+		},
+		{
+			"name": "RF95_master_hello_world",
+			"path": "master_slave_hello_world\\RF95_master_hello_world"
+		},
+		{
+			"name": "RF95_slave_hello_world",
+			"path": "master_slave_hello_world\\RF95_slave_hello_world"
 		}
 	],
 	"settings": {}
