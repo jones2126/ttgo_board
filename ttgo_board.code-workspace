@@ -6,6 +6,10 @@
 		{
 			"name": "220723-113302-arduino-blink",
 			"path": "..\\..\\PlatformIO\\Projects\\220723-113302-arduino-blink"
+		},
+		{
+			"name": "master_slave_hello_world",
+			"path": "master_slave_hello_world"
 		}
 	],
 	"settings": {}
