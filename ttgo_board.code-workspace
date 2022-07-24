@@ -30,6 +30,14 @@
 		{
 			"name": "ttgo_intial_test",
 			"path": "ttgo_intial_test"
+		},
+		{
+			"name": "radio_control_slave_v1",
+			"path": "radio_control_slave_v1"
+		},
+		{
+			"name": "radio_control_tractor_v1",
+			"path": "radio_control_tractor_v1"
 		}
 	],
 	"settings": {}
