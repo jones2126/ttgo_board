@@ -230,13 +230,6 @@ void sendOutgoingMsg(){
     //Serial.println("Sent a reply");
     if (state == RADIOLIB_ERR_NONE) {
         // the packet was successfully transmitted
-        //Serial.println(F(" success!, sent the following data..."));
-        //Serial.print("steering: "); Serial.print(RadioControlData.steering_val);
-        //Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
-        //Serial.print(", press_norm: "); Serial.print(RadioControlData.press_norm);
-        //Serial.print(", press_hg: "); Serial.print(RadioControlData.press_hg);
-        //Serial.print(", temp: "); Serial.print(RadioControlData.temp);
-        //Serial.print(", counter: "); Serial.println(RadioControlData.counter);
         // print measured data rate
         Serial.print(F("[SX1278] Datarate:\t"));
         Serial.print(radio.getDataRate());
