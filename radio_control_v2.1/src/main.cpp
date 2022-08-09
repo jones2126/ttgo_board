@@ -277,10 +277,7 @@ void getWeatherReadings(){
 }
 void handleIncomingMsg(){
     int state = radio.receive(tx_TractorData_buf, TractorData_message_len);
-    if (state == RADIOLIB_ERR_NONE) {
-      // packet was successfully received
-      //Serial.println(F("packet successfully received!"));
-      // print the RSSI (Received Signal Strength Indicator) of the last received packet
+    if (state == RADIOLIB_ERR_NONE) {    // packet was successfully received
       Serial.print(F("[SX1278] RSSI:\t\t\t"));  Serial.print(radio.getRSSI());  Serial.println(F(" dBm"));
       // print the SNR (Signal-to-Noise Ratio) of the last received packet
       //Serial.print(F("[SX1278] SNR:\t\t\t"));  Serial.print(radio.getSNR());  Serial.println(F(" dB"));
@@ -331,15 +328,7 @@ void sendOutgoingMsg(){
                         Serial.print(F("failed, code "));
                         Serial.println(state);
                         }
-    /*
-    Serial.print(F("Outgoing message (hex):\t\t\t"));
-    int i=0;
-    for (i=0; i<RadioControlData_message_len; i++) {
-        printf("%02x ", tx_RadioControlData_buf[i]);
-        }
-    printf("\n");
-    */
-   RadioControlData.counter++;
+    RadioControlData.counter++;
     digitalWrite(led, LOW);
 }
 void startOLED(){
