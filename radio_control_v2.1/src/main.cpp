@@ -39,6 +39,8 @@ void handleIncomingMsg();
 void sendOutgoingMsg();
 void startOLED();
 void displayOLED();
+float setThrottle(int x);
+float setSteering(int x);
 
 float FREQUENCY = 915.0;        // MHz - EU 433.5; US 915.0
 float BANDWIDTH = 125;          // 10.4, 15.6, 20.8, 31.25, 41.7, 62.5, 125, 250 and 500 kHz.
@@ -54,15 +56,17 @@ SX1276 radio = new Module(18, 26, 14, 33);  // Module(CS, DI0, RST, ??); - Modul
 //Sensor Pin definitions
 #define POT_X 36
 #define POT_Y 37
-int steering_val = 0;
-int throttle_val = 0;
+float steering_val = 0;
+float steering_val_ROS = 0;
+float throttle_val = 0;
+float throttle_val_ROS = 0;
 int switch_mode;
 
 int led = 2;
 
 struct RadioControlStruct{
-  int steering_val;
-  int throttle_val;
+  float steering_val;
+  float throttle_val;
   float press_norm ; 
   float press_hg;
   float temp;
@@ -90,10 +94,6 @@ uint8_t tx_TractorData_buf[sizeof(TractorData)] = {0};
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
-// or using RadioShield
-// https://github.com/jgromes/RadioShield
-//SX1278 radio = RadioShield.ModuleA;
-
 void setup() {
   pinMode(led, OUTPUT);
   startSerial();
@@ -107,7 +107,8 @@ void loop() {
   sendOutgoingMsg();
   handleIncomingMsg();
   displayOLED();
-  delay(333); // wait before transmitting again
+  //delay(333); // wait before transmitting again
+  delay(5000); // wait before transmitting again
 }
 void startSerial(){
   Serial.begin(115200);
@@ -117,8 +118,6 @@ void startSerial(){
   Serial.println("starting: radio_control_slave_v1");
 }
 void InitLoRa(){
-
-// initialize SX1276 with default settings
   Serial.print(F("[SX1276] Initializing ... "));
   int state = radio.begin();
   if (state == RADIOLIB_ERR_NONE) {  
@@ -153,7 +152,6 @@ void InitLoRa(){
     }
   Serial.print("Selected coding rate is: ");  Serial.println(CODING_RATE);
 
-
   if (radio.setSyncWord(SYNC_WORD) != RADIOLIB_ERR_NONE) {
     Serial.println(F("Unable to set sync word!"));
     while (true);
@@ -168,49 +166,101 @@ void InitLoRa(){
       Serial.println(state);      
       while (true);
       }
-  delay(10000); 
+  delay(2000); 
 }
 void getControlReadings(){
-  //steering_val = analogRead(POT_Y);
   throttle_val = analogRead(POT_X);
-  RadioControlData.steering_val = 255;
-  RadioControlData.throttle_val = setThrottle(throttle_val);
+  throttle_val_ROS  = setThrottle(throttle_val);
+  Serial.print(F("throttle_val_ROS: "));  Serial.println(throttle_val_ROS);
+  RadioControlData.throttle_val = throttle_val_ROS;
+  Serial.print(F("RadioControlData.throttle_val: "));  Serial.println(RadioControlData.throttle_val);
+
+  steering_val = analogRead(POT_Y);
+  Serial.print(F("steering_val: "));  Serial.println(steering_val);
+  steering_val_ROS = setSteering(steering_val);
+  Serial.print(F("steering_val_ROS: "));  Serial.println(steering_val_ROS);
+  RadioControlData.steering_val = steering_val_ROS;
+  Serial.print(F("RadioControlData.steering_val: "));  Serial.println(RadioControlData.steering_val);
+
 }
-void setThrottle(int x){
-    int throttle_setting;  
-    if (x >=0 && x <=70){
-        Serial.println("power 0%");
-        throttle_setting = 0;
-        } else if (x >=71 && x <=226){
-            Serial.println("power 10%");
-            throttle_setting = 10;
-            } else if (x >=227 && x <=341){
-                  Serial.println("power 25%");
-                  throttle_setting = 25;
-                  } else if (x >=342 && x <=755){
-                        Serial.println("power 33%");
-                        throttle_setting = 33;
-                        } else if (x >=756 && x <=1134){
-                              Serial.println("power 50%");
-                              throttle_setting = 50;
-                              } else if (x >=1135 && x <=2489){
-                                    Serial.println("power 62%");
-                                    throttle_setting = 62;
-                                    } else if (x >=2490 && x <=2756){
-                                          Serial.println("power 75%");
-                                          throttle_setting = 75;
-                                          } else if (x >=2757 && x <=4044){
-                                                Serial.println("power 87%");
-                                                throttle_setting = 87;
-                                                } else if (x >=4045 && x <=4096){
-                                                      Serial.println("power 100%");
-                                                      throttle_setting = 100;
+float setThrottle(int x){
+    float throttle_setting;
+    Serial.print("POT X: ");  Serial.println(x);
+    if (x >=0 && x <=752){
+        Serial.println("speed -1.0");
+        throttle_setting = -1.0;
+        } else if (x >=753 && x <=1570){
+            Serial.println("speed -0.50");
+            throttle_setting = -0.5;
+            } else if (x >=1571 && x <=2401){
+                  Serial.println("speed Neutral");
+                  throttle_setting = 0.0;
+                  } else if (x >=2402 && x <=3216){
+                        Serial.println("speed 0.50");
+                        throttle_setting = 0.5;
+                        } else if (x >=3217 && x <=4080){
+                              Serial.println("speed 1.0");
+                              throttle_setting = 1.0;
+                              } else if (x >=4081 && x <=4090){
+                                    Serial.println("speed 1.8");
+                                    throttle_setting = 1.8;
+                                    } else if (x >=4091 && x <=4092){
+                                          Serial.println("speed 1.8");
+                                          throttle_setting = 1.8;
+                                          } else if (x >=4093 && x <=4094){
+                                                Serial.println("speed 1.8");
+                                                throttle_setting = 1.8;
+                                                } else if (x >=4094 && x <=4096){
+                                                      Serial.println("speed 1.8");
+                                                      throttle_setting = 1.8;
                                                       }
                                                       else {
                                                         Serial.println("power error");
                                                         throttle_setting = 0;
                                                       }
     return throttle_setting;                                                  
+}
+float setSteering(int x){
+/*
+		        angular-z		      pot	
+		      start	  end	    start	end
+1	-1.00	  -1.00	  -1.00	    0	    0
+2	-0.75	  -1.00	  -0.75	    1	   16
+3	-0.50	  -0.75	  -0.50	   17	  113
+4	-0.25	  -0.50	  -0.25	  114	  209
+5	0.00	  0.00	   0.00	  210	  246
+6	0.25	  0.00	   0.25	  247 	830
+7	0.50	  0.25	   0.50	  831	 1502
+8	0.75	  0.50	   0.75	 1503	 2446
+9	1.00	  0.75	   1.00	 2447	 4095
+*/
+    float steering_setting;  
+    if (x >=0 && x <=129){
+        steering_setting = -1.00;
+        } else if (x >=130 && x <=297){
+            steering_setting = -0.67;
+            } else if (x >=298 && x <=450){
+                  steering_setting = -0.33;
+                  } else if (x >=451 && x <=1232){
+                        steering_setting = 0.0;
+                        } else if (x >=1233 && x <=2350){
+                              steering_setting = 0.33;
+                              } else if (x >=2351 && x <=3467){
+                                    steering_setting = 0.67;
+                                    } else if (x >=3468 && x <=4093){
+                                          steering_setting = 1.0;
+                                          } else if (x >=4094 && x <=4095){
+                                                steering_setting = 1.0;
+                                                } else if (x >=4096 && x <=4097){
+                                                      steering_setting = 1.0;
+                                                      }
+                                                      else {
+                                                        Serial.println("steering error");
+                                                        steering_setting = 0;
+                                                      }
+    return steering_setting;                     
+
+
 }
 void getWeatherReadings(){
   //light_val = analogRead(light_sensor);  
@@ -229,13 +279,13 @@ void handleIncomingMsg(){
     int state = radio.receive(tx_TractorData_buf, TractorData_message_len);
     if (state == RADIOLIB_ERR_NONE) {
       // packet was successfully received
-      Serial.println(F("packet successfully received!"));
+      //Serial.println(F("packet successfully received!"));
       // print the RSSI (Received Signal Strength Indicator) of the last received packet
       Serial.print(F("[SX1278] RSSI:\t\t\t"));  Serial.print(radio.getRSSI());  Serial.println(F(" dBm"));
       // print the SNR (Signal-to-Noise Ratio) of the last received packet
-      Serial.print(F("[SX1278] SNR:\t\t\t"));  Serial.print(radio.getSNR());  Serial.println(F(" dB"));
+      //Serial.print(F("[SX1278] SNR:\t\t\t"));  Serial.print(radio.getSNR());  Serial.println(F(" dB"));
       // print frequency error of the last received packet
-      Serial.print(F("[SX1278] Frequency error:\t"));  Serial.print(radio.getFrequencyError());  Serial.println(F(" Hz"));
+      //Serial.print(F("[SX1278] Frequency error:\t"));  Serial.print(radio.getFrequencyError());  Serial.println(F(" Hz"));
       // print the data from the received message 
       memcpy(&TractorData, tx_TractorData_buf, TractorData_message_len);
       Serial.print(F("Incoming message:\t\t\t"));
@@ -260,7 +310,7 @@ void handleIncomingMsg(){
 }
 void sendOutgoingMsg(){
     digitalWrite(led, HIGH);
-    Serial.print(F("[SX1278] Transmitting steering, throttle, pressure, etc. ... "));
+    //Serial.print(F("[SX1278] Transmitting steering, throttle, pressure, etc. ... "));
     memcpy(tx_RadioControlData_buf, &RadioControlData, RadioControlData_message_len);
     int state = radio.transmit(tx_RadioControlData_buf, RadioControlData_message_len);
     //Serial.println("Sent a reply");
@@ -317,12 +367,13 @@ void displayOLED(){
   display.print("Control Readings");
   display.setCursor(0,30);
   display.print("Throttle:");
-  display.setCursor(54,30);
-  display.print(throttle_val);
+  display.setCursor(62,30);
+  display.print(throttle_val_ROS);
+  Serial.print(F("throttle_val_ROS: "));  Serial.println(throttle_val_ROS);
   display.setCursor(0,40);
-  display.print("Pot 2:");
-  display.setCursor(54,40);
-  display.print(steering_val);
+  display.print("Steering:");
+  display.setCursor(62,40);
+  display.print(steering_val_ROS);
   display.setCursor(0,50);
   display.print("Mode SW");
   display.setCursor(66,50);

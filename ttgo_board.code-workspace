@@ -42,6 +42,10 @@
 		{
 			"name": "tractor_control_v2",
 			"path": "tractor_control_v2"
+		},
+		{
+			"name": "radio_control_v2.1",
+			"path": "radio_control_v2.1"
 		}
 	],
 	"settings": {}
