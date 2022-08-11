@@ -29,6 +29,8 @@
 // include the library
 #include <RadioLib.h>
 #include <Adafruit_SSD1306.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
 
 // functions below loop() - required to tell VSCode compiler to look for them below.  Not required when using Arduino IDE
 void startSerial();
@@ -41,7 +43,10 @@ void startOLED();
 void displayOLED();
 float setThrottle(int x);
 float setSteering(int x);
+void startBME();
+void checkRSSIstatus();
 
+// radio related
 float FREQUENCY = 915.0;        // MHz - EU 433.5; US 915.0
 float BANDWIDTH = 125;          // 10.4, 15.6, 20.8, 31.25, 41.7, 62.5, 125, 250 and 500 kHz.
 uint8_t SPREADING_FACTOR = 10;  // 6 - 12; higher is slower; started with 7, 8 (barely successful)
@@ -49,7 +54,7 @@ uint8_t CODING_RATE = 7;        // 5 - 8; high data rate / low range -> low data
 byte SYNC_WORD = 0x12;          // set LoRa sync word to 0x12...NOTE: value 0x34 is reserved and should not be used
 int8_t POWER = 10;              // 2 - 20dBm
 float F_OFFSET = 1250 / 1e6;    // Hz - optional if you want to offset the frequency
-
+float RSSI = 0;
 
 SX1276 radio = new Module(18, 26, 14, 33);  // Module(CS, DI0, RST, ??); - Module(18, 26, 14, 33);
 
@@ -68,8 +73,8 @@ struct RadioControlStruct{
   float steering_val;
   float throttle_val;
   float press_norm ; 
-  float press_hg;
-  float temp;
+  float humidity;
+  float TempF;
   unsigned long counter;
   }RadioControlData;
 
@@ -94,11 +99,31 @@ uint8_t tx_TractorData_buf[sizeof(TractorData)] = {0};
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
+//BME280 definition
+#define BME280_SDA 21
+#define BME280_SCL 13
+#define SEALEVELPRESSURE_HPA (1013.25)
+TwoWire I2Cone = TwoWire(1);
+Adafruit_BME280 bme;
+float temperature = 0;
+float TempF = 0;
+float humidity = 0;
+float pressure = 0;
+float altitude = 0;
+
+// LED status related
+#include <FastLED.h>
+#define NUM_LEDS 4
+#define DATA_PIN 25
+#define BRIGHTNESS 30  // 0 off, 255 highest
+CRGB leds[NUM_LEDS];
+
 void setup() {
   pinMode(led, OUTPUT);
   startSerial();
   InitLoRa();
   startOLED();
+  startBME();
 }
 
 void loop() {
@@ -107,6 +132,7 @@ void loop() {
   sendOutgoingMsg();
   handleIncomingMsg();
   displayOLED();
+  checkRSSIstatus();
   //delay(333); // wait before transmitting again
   delay(5000); // wait before transmitting again
 }
@@ -264,21 +290,41 @@ float setSteering(int x){
 }
 void getWeatherReadings(){
   //light_val = analogRead(light_sensor);  
- // temperature = bme.readTemperature();
- // TempF = (temperature*1.8)+32;
- // humidity = bme.readHumidity();
- // pressure = bme.readPressure() / 100.0F;
+    temperature = bme.readTemperature();
+    TempF = (temperature*1.8)+32; // Convert temperature to Fahrenheit
+    humidity = bme.readHumidity();
+    pressure = bme.readPressure() / 100.0F;
+    altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
 
 // set initial values for tranmitting data
 
-  RadioControlData.press_norm=1000.11; 
-  RadioControlData.press_hg=0.59; 
-  RadioControlData.temp=22.394;
+  Serial.print("Temperature *C = ");
+  Serial.print(temperature);
+  
+  Serial.print("Temperature *F = ");
+  Serial.print(TempF);  // Convert temperature to Fahrenheit
+   
+  Serial.print("Pressure (hPa) = ");
+  Serial.print(pressure);
+ 
+  Serial.print("Approx. Altitude (m) = ");
+  Serial.print(altitude);
+ 
+  Serial.print("Humidity = ");
+  Serial.print(humidity);
+  Serial.println(" %");
+ 
+  Serial.println();
+
+  RadioControlData.press_norm=pressure; 
+  RadioControlData.humidity=humidity; 
+  RadioControlData.TempF=TempF;
 }
 void handleIncomingMsg(){
     int state = radio.receive(tx_TractorData_buf, TractorData_message_len);
     if (state == RADIOLIB_ERR_NONE) {    // packet was successfully received
-      Serial.print(F("[SX1278] RSSI:\t\t\t"));  Serial.print(radio.getRSSI());  Serial.println(F(" dBm"));
+      RSSI = radio.getRSSI();
+      Serial.print(F("[SX1278] RSSI:\t\t\t"));  Serial.print(RSSI);  Serial.println(F(" dBm"));
       // print the SNR (Signal-to-Noise Ratio) of the last received packet
       //Serial.print(F("[SX1278] SNR:\t\t\t"));  Serial.print(radio.getSNR());  Serial.println(F(" dB"));
       // print frequency error of the last received packet
@@ -368,4 +414,31 @@ void displayOLED(){
   display.setCursor(66,50);
   display.print(switch_mode);  
   display.display();
+}
+void startBME(){
+  Serial.println("In startBME function");
+  I2Cone.begin(BME280_SDA, BME280_SCL, 100000ul); 
+  bool status1 = bme.begin(0x77, &I2Cone);  //default 0x77; jump SDO to GND to change address to 0x76
+  if (!status1) {
+    Serial.println("Could not find a valid BME280 sensor, check wiring, address, sensor ID!");
+    Serial.print("ID was: 0x"); Serial.println(bme.sensorID(),16);
+    Serial.print("ID of 0xFF probably means a bad address, a BMP 180 or BMP 085\n");
+    Serial.print("ID of 0x56-0x58 represents a BMP 280,\n");
+    Serial.print("ID of 0x60 represents a BME 280.\n");
+    Serial.print("ID of 0x61 represents a BME 680.\n");
+    while (1) delay(1000);    
+  }
+}
+void checkRSSIstatus(){
+  /*
+  leds[0] RSSI - green, yellow, red
+  leds[1] Remote Control Battery LED (Green (OK, Yellow-low, Red-Change)
+  */
+  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
+  leds[0] = CRGB::Red;
+  leds[1] = CRGB::Green;
+  leds[2] = CRGB::Blue;
+  leds[3] = CRGB::Yellow;
+  FastLED.setBrightness(BRIGHTNESS);
+  FastLED.show();
 }
