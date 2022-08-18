@@ -31,6 +31,7 @@
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
+#include <FastLED.h>
 
 // functions below loop() - required to tell VSCode compiler to look for them below.  Not required when using Arduino IDE
 void startSerial();
@@ -61,11 +62,13 @@ SX1276 radio = new Module(18, 26, 14, 33);  // Module(CS, DI0, RST, ??); - Modul
 //Sensor Pin definitions
 #define POT_X 36
 #define POT_Y 37
+#define voltage_pin 25
 float steering_val = 0;
 float steering_val_ROS = 0;
 float throttle_val = 0;
 float throttle_val_ROS = 0;
 int switch_mode;
+int voltage_val = 0;
 
 int led = 2;
 
@@ -114,10 +117,26 @@ float altitude = 0;
 // LED status related
 #include <FastLED.h>
 #define NUM_LEDS 4
-#define DATA_PIN 25
+#define DATA_PIN 12
 #define BRIGHTNESS 30  // 0 off, 255 highest
 CRGB leds[NUM_LEDS];
 
+int classifyRange(int a[], int);
+int return_test = 0;
+int sensor_value = -99;
+const int arraySize = 10; // size of array a
+int SteeeringPts[arraySize] = {0, 130, 298, 451, 1233, 2351, 3468, 4094, 4096, 4097}; 
+const char* const SteeeringPtsValues[] = {"-1.0", "-0.67", "-0.33", "0.0", "0.33", "0.67", "1.00", "1.00", "1.00", "error"};
+// although RSSI is presented as a negative, in order to use this array we will pass the ABS of RSSI ref: https://www.studocu.com/row/document/institute-of-space-technology/calculus/why-rssi-is-in-negative/3653793
+int RSSIPts[arraySize] = {0, 70, 90, 120, 124, 128, 132, 136, 140, 160}; 
+//const char* const RSSIPtsValues[] = {"green", "yellow", "red", "red", "red", "red", "red", "red", "red", "error"};
+CRGB RSSIPtsValues[arraySize] = {CRGB::Green, CRGB::Yellow, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::White};
+/*
+    leds[0] = CRGB::Red;
+    leds[1] = CRGB::Green;
+    leds[2] = CRGB::Blue;
+    leds[3] = CRGB::Yellow;
+*/
 void setup() {
   pinMode(led, OUTPUT);
   startSerial();
@@ -207,6 +226,8 @@ void getControlReadings(){
   Serial.print(F("steering_val_ROS: "));  Serial.println(steering_val_ROS);
   RadioControlData.steering_val = steering_val_ROS;
   Serial.print(F("RadioControlData.steering_val: "));  Serial.println(RadioControlData.steering_val);
+
+  voltage_val = analogRead(voltage_pin);
 
 }
 float setThrottle(int x){
@@ -324,7 +345,7 @@ void handleIncomingMsg(){
     int state = radio.receive(tx_TractorData_buf, TractorData_message_len);
     if (state == RADIOLIB_ERR_NONE) {    // packet was successfully received
       RSSI = radio.getRSSI();
-      Serial.print(F("[SX1278] RSSI:\t\t\t"));  Serial.print(RSSI);  Serial.println(F(" dBm"));
+      //Serial.print(F("[SX1278] RSSI:\t\t\t"));  Serial.print(RSSI);  Serial.println(F(" dBm"));
       // print the SNR (Signal-to-Noise Ratio) of the last received packet
       //Serial.print(F("[SX1278] SNR:\t\t\t"));  Serial.print(radio.getSNR());  Serial.println(F(" dB"));
       // print frequency error of the last received packet
@@ -400,20 +421,13 @@ void displayOLED(){
   display.setCursor(0,0);
   display.setTextSize(1);
   display.print("Control Readings");
-  display.setCursor(0,30);
-  display.print("Throttle:");
-  display.setCursor(62,30);
-  display.print(throttle_val_ROS);
-  Serial.print(F("throttle_val_ROS: "));  Serial.println(throttle_val_ROS);
-  display.setCursor(0,40);
-  display.print("Steering:");
-  display.setCursor(62,40);
-  display.print(steering_val_ROS);
-  display.setCursor(0,50);
-  display.print("Mode SW");
-  display.setCursor(66,50);
-  display.print(switch_mode);  
+  display.setCursor(0,17);  display.print("RC Volt:");  display.setCursor(58,17); display.print(voltage_val);  
+  display.setCursor(0,27);  display.print("RSSI:");     display.setCursor(58,27); display.print(radio.getRSSI());
+  display.setCursor(0,37);  display.print("Throttle:"); display.setCursor(58,37); display.print(throttle_val_ROS);
+  display.setCursor(0,47);  display.print("Steering:"); display.setCursor(58,47); display.print(steering_val_ROS);
+  display.setCursor(0,57);  display.print("Mode SW:");  display.setCursor(58,57); display.print(switch_mode);  
   display.display();
+  Serial.print(F("throttle_val_ROS: "));  Serial.println(throttle_val_ROS);
 }
 void startBME(){
   Serial.println("In startBME function");
@@ -430,15 +444,41 @@ void startBME(){
   }
 }
 void checkRSSIstatus(){
-  /*
-  leds[0] RSSI - green, yellow, red
-  leds[1] Remote Control Battery LED (Green (OK, Yellow-low, Red-Change)
-  */
-  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
-  leds[0] = CRGB::Red;
-  leds[1] = CRGB::Green;
-  leds[2] = CRGB::Blue;
-  leds[3] = CRGB::Yellow;
-  FastLED.setBrightness(BRIGHTNESS);
-  FastLED.show();
+    RSSI = abs(radio.getRSSI());
+    Serial.print("abs(RSSI) sent: "); Serial.print(RSSI);
+    return_test = classifyRange(RSSIPts, RSSI);
+    Serial.print(", returned: "); Serial.println(return_test);  
+    FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
+    leds[0] = RSSIPtsValues[return_test];
+    leds[1] = CRGB::Blue;
+    leds[2] = CRGB::Blue;
+    leds[3] = CRGB::Blue;
+    FastLED.setBrightness(BRIGHTNESS);
+    FastLED.show();
+}
+int classifyRange(int a[], int x){ 
+    int classification_ptr;  
+    if (x >=a[0] && x <=(a[1]-1)){
+        classification_ptr = 0;
+        } else if (x >=a[1] && x <=(a[2]-1)){
+            classification_ptr = 1;
+            } else if (x >=a[2] && x <=(a[3]-1)){
+                  classification_ptr = 2;
+                  } else if (x >=a[3] && x <=(a[4]-1)){
+                        classification_ptr = 3;
+                        } else if (x >=a[4] && x <=(a[5]-1)){
+                              classification_ptr = 4;
+                              } else if (x >=a[5] && x <=(a[6]-1)){
+                                    classification_ptr = 5;
+                                    } else if (x >=a[6] && x <=(a[7]-1)){
+                                          classification_ptr = 6;
+                                          } else if (x >=a[7] && x <=(a[8]-1)){
+                                                classification_ptr = 7;
+                                                } else if (x >=a[8] && x <=a[9]){
+                                                      classification_ptr = 8;
+                                                      }
+                                                      else {
+                                                        classification_ptr = 9;
+                                                      }
+    return classification_ptr;        
 }
