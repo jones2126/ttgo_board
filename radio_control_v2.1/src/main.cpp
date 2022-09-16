@@ -103,8 +103,8 @@ uint8_t tx_TractorData_buf[sizeof(TractorData)] = {0};
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
 //BME280 definition
-#define BME280_SDA 21
-#define BME280_SCL 13
+#define BME280_SDA 13
+#define BME280_SCL 21
 #define SEALEVELPRESSURE_HPA (1013.25)
 TwoWire I2Cone = TwoWire(1);
 Adafruit_BME280 bme;
