@@ -1,5 +1,10 @@
 #include <Arduino.h>
 /*
+#include <soc/soc.h>
+#include <soc/rtc>
+*/
+
+/*
 Functions: 
 get radio transmission from lora, decode speed and steering instruction
 read actual tractor speed and steering angle
@@ -7,6 +12,12 @@ instruct the transmission controller and steering controller to move
 
 testing:
 - read the lo-resolution angle sensor
+
+Very hard left - 2900
+soft hard left - 2660
+middle - 1497, 1440, 1337
+soft hard right - 92
+very hard right - 0
 
 */
 const int LoResPin = 38;  //   PCB  "Deadman" is pin 38
@@ -18,6 +29,7 @@ unsigned long prev_analog_pot_read =  0;
 void startSerial();
 
 void setup() {
+    //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);  // ref: https://www.esp32.com/viewtopic.php?t=10742
     startSerial();
   // put your setup code here, to run once:
 }
