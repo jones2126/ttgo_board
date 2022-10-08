@@ -1,28 +1,11 @@
 /*
-   RadioLib SX127x, (specifically SX1276) Transmit Example Using a LoRa OLED TTGO V1 board
+This is meant to run on a TTGO ESP32 LoRa OLED V1 board to be a hand-held radio control device which interacts with another board
+to take primarily the throttle and steering settings and for those settings to be processed by the other, companion board.  There
+are other features also configured in this program.  For example there is a physical e-stop switch that if enabled would direct
+the companion board to execute an e-stop protocol. 
 
-   This example transmits packets using SX1278 LoRa radio module.
-   Each packet contains up to 256 bytes of data, in the form of:
-    - Arduino String
-    - null-terminated char array (C-string)
-    - arbitrary binary data (byte array)
-
-   Other modules from SX127x/RFM9x family can also be used.
-
-   For default module settings, see the wiki page
-   https://github.com/jgromes/RadioLib/wiki/Default-configuration#sx127xrfm9x---lora-modem
-
-   For full API reference, see the GitHub Pages
-   https://jgromes.github.io/RadioLib/
-
-#define SS 18 // GPIO18 -- SX1278's CS
-#define DI0 26 // GPIO26 -- SX1278's IRQ(Interrupt Request)
-#define RST 14 // GPIO14 -- SX1278's RESET
-
-#define SCK 5 // GPIO5 -- SX1278's SCK
-#define MISO 19 // GPIO19 -- SX1278's MISO
-#define MOSI 27 // GPIO27 -- SX1278's MOSI
-#define DI1 33 // GPIO33
+You will see below this program uses the RadioLib SX127x (i.e. jgromes/RadioLib@^5.3.0) library to manage the LoRa communications
+ref: https://github.com/jgromes/RadioLib/wiki/Default-configuration#sx127xrfm9x---lora-modem  or https://jgromes.github.io/RadioLib/
 
 */
 
@@ -144,7 +127,6 @@ void setup() {
   startOLED();
   startBME();
 }
-
 void loop() {
   getControlReadings();
   getWeatherReadings();
