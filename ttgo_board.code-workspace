@@ -50,6 +50,10 @@
 		{
 			"name": "ttgo_read_battery_voltage",
 			"path": "..\\..\\PlatformIO\\Projects\\ttgo_read_battery_voltage"
+		},
+		{
+			"name": "scratch_pad_test_area",
+			"path": "../../PlatformIO/Projects/scratch_pad_test_area"
 		}
 	],
 	"settings": {
