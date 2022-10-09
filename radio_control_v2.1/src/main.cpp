@@ -178,7 +178,6 @@ void setup(){
 void loop(){
   unsigned long currentMillis = millis();
   handleIncomingMsg();
-
   if ((currentMillis - prev_time_reading)   >= readingInterval)   {getControlReadings();}
   if ((currentMillis - prev_time_weather)    >= weatherInterval)  {getWeatherReadings();}
   if ((currentMillis - prev_time_xmit)       >= transmitInterval) {sendOutgoingMsg();}
@@ -320,16 +319,11 @@ void getWeatherReadings(){
 void handleIncomingMsg(){
     int state = radio.receive(tx_TractorData_buf, TractorData_message_len);
     if (state == RADIOLIB_ERR_NONE) {    // packet was successfully received
-
       prev_time_radio_signal = millis();  
       RSSI = abs(radio.getRSSI());
       displayLEDstatus();      
-      // set a switch or timer that you received a message and move the RSSI category check to here
-
       memcpy(&TractorData, tx_TractorData_buf, TractorData_message_len);
-
-      TractorData.counter++;
-
+      //TractorData.counter++;
       digitalWrite(led, HIGH);
       } else if (state == RADIOLIB_ERR_RX_TIMEOUT) {
             // timeout occurred while waiting for a packet
@@ -473,7 +467,8 @@ void print_Info_messages(){
     Serial.print(" speed: "); Serial.print(TractorData.speed);
     Serial.print(", heading: "); Serial.print(TractorData.heading);
     Serial.print(", voltage: "); Serial.print(TractorData.voltage);
-    Serial.print(", counter: "); Serial.print(TractorData.counter);
+    Serial.print(", TractorData.counter: "); Serial.print(TractorData.counter);
+    Serial.print(", RadioControlData.counter: "); Serial.print(RadioControlData.counter);
     printf("\n");
     printf("\n");     
     //Serial.print(F("[SX1278] RSSI:\t\t\t"));  Serial.print(RSSI);  Serial.println(F(" dBm"));
