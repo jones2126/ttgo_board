@@ -95,7 +95,6 @@ void setup() {
   startSerial();
   InitLoRa();
 }
-
 void loop() {
     unsigned long currentMillis = millis();
     handleIncomingMsg();
