@@ -1,22 +1,18 @@
 /*
-   RadioLib SX127x, (specifically SX1276) Receive Example LoRa OLED TTGO V1 board
+This is meant to run on a TTGO ESP32 LoRa OLED V1 board to control a tractor.  This device interacts with another board
+to primarily receive the throttle and steering settings and and to apply those settings to the steering and throttle
+controller connected to this TTGO board.
 
-   This example listens for LoRa transmissions using SX127x Lora modules.
-   To successfully receive data, the following settings have to be the same
-   on both transmitter and receiver:
-    - carrier frequency
-    - bandwidth
-    - spreading factor
-    - coding rate
-    - sync word
-    - preamble length
+There are other features also configured in this program.  For example if this program receives an e-stop notification
+this board should trigger a relay to stops the motor on the this tractor. 
 
-   Other modules from SX127x/RFM9x family can also be used.
+You will see below this program uses the RadioLib SX127x (i.e. jgromes/RadioLib@^5.3.0) library to manage the LoRa communications
+ref: https://github.com/jgromes/RadioLib/wiki/Default-configuration#sx127xrfm9x---lora-modem  or https://jgromes.github.io/RadioLib/
 
-   For default module settings, see the wiki page
-   https://github.com/jgromes/RadioLib/wiki/Default-configuration#sx127xrfm9x---lora-modem
-
-   For full API reference, see the GitHub Pages: https://jgromes.github.io/RadioLib/
+10/8/22 - 
+- Test receiving throttle and steering settings
+- Test receiving the e-stop notification
+- Test getting heading and speed from ROS and transmitting to the radio control device
 */
 
 // include the library
@@ -55,12 +51,12 @@ void handleIncomingMsg();
 //float FREQUENCY = 433.5;  // MHz - EU 433.5; US 915.0
 float FREQUENCY = 915.0;  // MHz - EU 433.5; US 915.0
 float BANDWIDTH = 125;  // 10.4, 15.6, 20.8, 31.25, 41.7, 62.5, 125, 250 and 500 kHz.
-uint8_t SPREADING_FACTOR = 10;  // 6 - 12; higher is slower; started at 7
+uint8_t SPREADING_FACTOR = 8;  // 6 - 12; higher is slower; started at 7
 uint8_t CODING_RATE = 7;  // 5 - 8; high data rate / low range -> low data rate / high range
 byte SYNC_WORD = 0x12; // set LoRa sync word to 0x12...NOTE: value 0x34 is reserved and should not be used
 
 float F_OFFSET = 1250 / 1e6;  // Hz - optional if you want to offset the frequency
-int8_t POWER = 10;  // 2 - 20dBm
+int8_t POWER = 15;  // 2 - 20dBm
 
 SX1276 radio = new Module(18, 26, 14, 33);  // Module(CS, DI0, RST, ??); - Module(18, 26, 14, 33);
 
@@ -69,8 +65,8 @@ SX1276 radio = new Module(18, 26, 14, 33);  // Module(CS, DI0, RST, ??); - Modul
 int led = 2;
 
 struct RadioControlStruct{
-  int steering_val;
-  int throttle_val;
+  float steering_val;
+  float  throttle_val;
   float press_norm ; 
   float press_hg;
   float temp;
@@ -90,7 +86,10 @@ struct TractorDataStruct{
 uint8_t TractorData_message_len = sizeof(TractorData);
 uint8_t tx_TractorData_buf[sizeof(TractorData)] = {0};
 
-
+const long readingInterval = 100;
+unsigned long prev_time_reading = 0;
+unsigned long prev_time_xmit = 0;
+const long transmitInterval = 500;
 
 void setup() {
   startSerial();
@@ -98,10 +97,10 @@ void setup() {
 }
 
 void loop() {
-  getTractorData();
-  sendOutgoingMsg();
-  handleIncomingMsg();
-  delay(333); // wait before transmitting again
+    unsigned long currentMillis = millis();
+    handleIncomingMsg();
+    if ((currentMillis - prev_time_reading) >= readingInterval)   {getTractorData();}
+    if ((currentMillis - prev_time_xmit)    >= transmitInterval)  {sendOutgoingMsg();}
 }
 void startSerial(){
   Serial.begin(115200);
@@ -168,25 +167,24 @@ void getTractorData(){
   TractorData.speed = 255;
   TractorData.heading = 359.9;
   TractorData.voltage = 12.8;
-  TractorData.counter++;
+  prev_time_reading = millis();
 }
 void sendOutgoingMsg(){
     digitalWrite(led, HIGH);
-    Serial.print(F("[SX1278] Transmitting packet ... "));
+    Serial.print(F(", xmit"));
     memcpy(tx_TractorData_buf, &TractorData, TractorData_message_len);
     int state = radio.transmit(tx_TractorData_buf, TractorData_message_len);
-    //Serial.println("Sent a reply");
     if (state == RADIOLIB_ERR_NONE) {
         // the packet was successfully transmitted
         //Serial.println(F(" success!, sent the following data..."));
         //Serial.print("speed: "); Serial.print(TractorData.speed);
         //Serial.print("heading: "); Serial.print(TractorData.heading);
         //Serial.print("voltage: "); Serial.print(TractorData.voltage);
-        //Serial.print("counter: "); Serial.print(TractorData.counter);
+        Serial.print("TractorData.counter: "); Serial.print(TractorData.counter);
         // print measured data rate
-        Serial.print(F("[SX1278] Datarate:\t"));
+        Serial.print(F(", Datarate: "));
         Serial.print(radio.getDataRate());
-        Serial.println(F(" bps"));
+        Serial.print(F(" bps"));
         } else if (state == RADIOLIB_ERR_PACKET_TOO_LONG) {
               // the supplied packet was longer than 256 bytes
               Serial.println(F("too long!"));
@@ -198,35 +196,32 @@ void sendOutgoingMsg(){
                         Serial.print(F("failed, code "));
                         Serial.println(state);
                         }
-   //RadioControlData.counter++;
+    TractorData.counter++;
     digitalWrite(led, LOW);
 }
 void handleIncomingMsg(){
     int state = radio.receive(tx_RadioControlData_buf, RadioControlData_message_len);
     if (state == RADIOLIB_ERR_NONE) {
       // packet was successfully received
-      Serial.println(F("packet successfully received!"));
-      // print the RSSI (Received Signal Strength Indicator) of the last received packet
-      Serial.print(F("[SX1278] RSSI:\t\t\t"));  Serial.print(radio.getRSSI());  Serial.println(F(" dBm"));
-      // print the SNR (Signal-to-Noise Ratio) of the last received packet
-      Serial.print(F("[SX1278] SNR:\t\t\t"));  Serial.print(radio.getSNR());  Serial.println(F(" dB"));
-      // print frequency error of the last received packet
-      Serial.print(F("[SX1278] Frequency error:\t"));  Serial.print(radio.getFrequencyError());  Serial.println(F(" Hz"));
-      // print the data from the received message 
       memcpy(&RadioControlData, tx_RadioControlData_buf, RadioControlData_message_len);
-      Serial.print(F("Incoming message:\t\t\t"));
-      Serial.print("steering: "); Serial.print(RadioControlData.steering_val);
+      Serial.println(F("packet received!"));
+      // print the RSSI (Received Signal Strength Indicator) of the last received packet
+      Serial.print(F("RSSI: "));  Serial.print(radio.getRSSI());  
+      Serial.print(F(", SNR: "));  Serial.print(radio.getSNR());  
+      //Serial.print(F(", dB"));
+      Serial.print(F(", Freq error: ")); Serial.print(radio.getFrequencyError());  
+      //Serial.print(F(", Hz"));
+      Serial.print(", steering: "); Serial.print(RadioControlData.steering_val);
       Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
       Serial.print(", press_norm: "); Serial.print(RadioControlData.press_norm);
       Serial.print(", press_hg: "); Serial.print(RadioControlData.press_hg);
       Serial.print(", temp: "); Serial.print(RadioControlData.temp);
-      Serial.print(", counter: "); Serial.println(RadioControlData.counter);
-      //RadioControlData.counter++;
+      Serial.print(", RadioControlData.counter: "); Serial.print(RadioControlData.counter);
       printf("\n"); 
       digitalWrite(led, HIGH);
       } else if (state == RADIOLIB_ERR_RX_TIMEOUT) {
             // timeout occurred while waiting for a packet
-            Serial.println(F("nothing received, waiting!"));
+            Serial.print(F(", pending packet"));
             } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
                   // packet was received, but is malformed
                   Serial.println(F("nothing received, no timeout, but CRC error!"));
