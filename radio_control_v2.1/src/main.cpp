@@ -12,7 +12,7 @@ ref: https://github.com/jgromes/RadioLib/wiki/Default-configuration#sx127xrfm9x-
 - change "float setThrottle(int x){" to the generic bucketing routine
 - Test sending throttle and steering settings
     - convert analog steering to -45 to 45
-
+- move the check RSSI function to inside the incoming message handler; Set a timer and flag if the timer expires
 - Test sending e-stop
 
 
@@ -34,7 +34,6 @@ void handleIncomingMsg();
 void sendOutgoingMsg();
 void startOLED();
 void displayOLED();
-float setThrottle(int x);
 float setSteering(int x);
 void startBME();
 void checkRSSIstatus();
@@ -44,10 +43,10 @@ void print_Info_messages();
 // radio related
 float FREQUENCY = 915.0;        // MHz - EU 433.5; US 915.0
 float BANDWIDTH = 125;          // 10.4, 15.6, 20.8, 31.25, 41.7, 62.5, 125, 250 and 500 kHz.
-uint8_t SPREADING_FACTOR = 10;  // 6 - 12; higher is slower; started with 7, 8 (barely successful)
+uint8_t SPREADING_FACTOR = 8;  // 6 - 12; higher is slower; started with 7, 8 (barely successful)
 uint8_t CODING_RATE = 7;        // 5 - 8; high data rate / low range -> low data rate / high range; the example started with 5
 byte SYNC_WORD = 0x12;          // set LoRa sync word to 0x12...NOTE: value 0x34 is reserved and should not be used
-int8_t POWER = 10;              // 2 - 20dBm
+int8_t POWER = 15;              // 2 - 20dBm
 float F_OFFSET = 1250 / 1e6;    // Hz - optional if you want to offset the frequency
 float RSSI = 0;
 
@@ -98,20 +97,21 @@ int voltage_val = 0;
 // used classifying results
 const int arraySize = 10; // size of array a
 int SteeeringPts[arraySize] = {0, 130, 298, 451, 1233, 2351, 3468, 4094, 4096, 4097}; 
-const char* const SteeeringPtsValues[] = {"-1.0", "-0.67", "-0.33", "0.0", "0.33", "0.67", "1.00", "1.00", "1.00", "error"};
+float SteeeringValues[] = {-45, -30, -15, 0, 15, 30, 45, 45, 45, 99};
 // although RSSI is presented as a negative, in order to use this array we will pass the ABS of RSSI ref: https://www.studocu.com/row/document/institute-of-space-technology/calculus/why-rssi-is-in-negative/3653793
 int RSSIPts[arraySize] = {0, 70, 90, 120, 124, 128, 132, 136, 140, 160}; 
-CRGB RSSIPtsValues[arraySize] = {CRGB::Green, CRGB::Yellow, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::White};
+CRGB RSSIPtsValues[arraySize] = {CRGB::Green, CRGB::Green, CRGB::Yellow, CRGB::Yellow, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::White};
 
 int ThrottlePts[arraySize] = {0, 780, 1490, 2480, 3275, 4000, 4001, 4002, 4096, 4097}; 
-char ThrottleValues[arraySize][3] = {"-2", "-1", "0", "1", "2", "3", "3", "3", "3", "99"};
+//char ThrottleValues[arraySize][3] = {"-2", "-1", "0", "1", "2", "3", "3", "3", "3", "99"};
+int ThrottleValues[arraySize] = {-2, -1, 0, 1, 2, 3, 3, 3, 3, 99};
 
 ///////////////////////////////////////////////////////////
 
 /////////////////////Loop Timing variables///////////////////////
 const long readingInterval = 50;
 const long weatherInterval = 5000;
-const long transmitInterval = 1000;
+const long transmitInterval = 2000;
 const long OLEDInterval = 500;
 const long infoInterval = 3000;  // 100 = 1/10 of a second (i.e. 10 Hz) 3000 = 3 seconds
 
@@ -134,7 +134,7 @@ unsigned long prev_time_printinfo = 0;
 /////////////////////// data structures ///////////////////////
 struct RadioControlStruct{
   float steering_val;
-  char *throttle_val;
+  float throttle_val;
   float press_norm ; 
   float humidity;
   float TempF;
@@ -172,7 +172,7 @@ void loop() {
   unsigned long currentMillis = millis();
   handleIncomingMsg();
   checkRSSIstatus();
-  if ((currentMillis - prev_time_reading)   >= readingInterval) {getControlReadings();}
+  if ((currentMillis - prev_time_reading)   >= readingInterval)   {getControlReadings();}
   if ((currentMillis - prev_time_weather)    >= weatherInterval)  {getWeatherReadings();}
   if ((currentMillis - prev_time_xmit)       >= transmitInterval) {sendOutgoingMsg();}
   if ((currentMillis - prev_time_OLED)       >= OLEDInterval)     {displayOLED();}
@@ -238,52 +238,14 @@ void InitLoRa(){
 }
 void getControlReadings(){
   throttle_val = analogRead(POT_X);
-  //throttle_val_ROS  = setThrottle(throttle_val);
   return_test = classifyRange(ThrottlePts, throttle_val); 
-  throttle_val_ROS = ThrottleValues[return_test];  
-  RadioControlData.throttle_val = throttle_val_ROS;
+  RadioControlData.throttle_val = ThrottleValues[return_test];
   steering_val = analogRead(POT_Y);
-  steering_val_ROS = setSteering(steering_val); 
-  RadioControlData.steering_val = steering_val_ROS; 
+  return_test = classifyRange(SteeeringPts, steering_val); 
+  RadioControlData.steering_val = SteeeringValues[return_test];
+  //steering_val_ROS = setSteering(steering_val); 
+  //RadioControlData.steering_val = steering_val_ROS; 
   voltage_val = analogRead(voltage_pin);  
-}
-float setThrottle(int x){
-
-    float throttle_setting;
-    //Serial.print("POT X: ");  Serial.println(x);
-    if (x >=0 && x <=752){
-        //Serial.println("speed -1.0");
-        throttle_setting = -1.0;
-        } else if (x >=753 && x <=1570){
-            //Serial.println("speed -0.50");
-            throttle_setting = -0.5;
-            } else if (x >=1571 && x <=2401){
-                  //Serial.println("speed Neutral");
-                  throttle_setting = 0.0;
-                  } else if (x >=2402 && x <=3216){
-                        //Serial.println("speed 0.50");
-                        throttle_setting = 0.5;
-                        } else if (x >=3217 && x <=4080){
-                              //Serial.println("speed 1.0");
-                              throttle_setting = 1.0;
-                              } else if (x >=4081 && x <=4090){
-                                    //Serial.println("speed 1.8");
-                                    throttle_setting = 1.8;
-                                    } else if (x >=4091 && x <=4092){
-                                          //Serial.println("speed 1.8");
-                                          throttle_setting = 1.8;
-                                          } else if (x >=4093 && x <=4094){
-                                                //Serial.println("speed 1.8");
-                                                throttle_setting = 1.8;
-                                                } else if (x >=4094 && x <=4096){
-                                                      //Serial.println("speed 1.8");
-                                                      throttle_setting = 1.8;
-                                                      }
-                                                      else {
-                                                        Serial.println("power error");
-                                                        throttle_setting = 0;
-                                                      }
-    return throttle_setting;                                                  
 }
 float setSteering(int x){
 /*
@@ -344,6 +306,7 @@ void handleIncomingMsg(){
     int state = radio.receive(tx_TractorData_buf, TractorData_message_len);
     if (state == RADIOLIB_ERR_NONE) {    // packet was successfully received
       RSSI = radio.getRSSI();
+      // set a switch or timer that you received a message and move the RSSI category check to here
 
       memcpy(&TractorData, tx_TractorData_buf, TractorData_message_len);
 
@@ -470,7 +433,7 @@ int classifyRange(int a[], int x){
 void print_Info_messages(){
     Serial.print(F("Last Message Info: "));
     Serial.print(" RSSI: "); Serial.print(RSSI);  
-    Serial.print(F(", throttle: "));  Serial.print(throttle_val_ROS);
+    Serial.print(F(", throttle: "));  Serial.print(RadioControlData.throttle_val);
     Serial.print(F(", POT X: "));  Serial.print(throttle_val);
     Serial.print(F(", steering: "));  Serial.print(RadioControlData.steering_val);     
     Serial.print(F(", POT Y: "));  Serial.print(steering_val);
