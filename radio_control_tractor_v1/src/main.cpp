@@ -47,17 +47,14 @@ void handleIncomingMsg();
 #define DI1 33 // GPIO33
 
  */
-
-//float FREQUENCY = 433.5;  // MHz - EU 433.5; US 915.0
+// radio related
 float FREQUENCY = 915.0;  // MHz - EU 433.5; US 915.0
 float BANDWIDTH = 125;  // 10.4, 15.6, 20.8, 31.25, 41.7, 62.5, 125, 250 and 500 kHz.
 uint8_t SPREADING_FACTOR = 8;  // 6 - 12; higher is slower; started at 7
 uint8_t CODING_RATE = 7;  // 5 - 8; high data rate / low range -> low data rate / high range
 byte SYNC_WORD = 0x12; // set LoRa sync word to 0x12...NOTE: value 0x34 is reserved and should not be used
-
 float F_OFFSET = 1250 / 1e6;  // Hz - optional if you want to offset the frequency
 int8_t POWER = 15;  // 2 - 20dBm
-
 SX1276 radio = new Module(18, 26, 14, 33);  // Module(CS, DI0, RST, ??); - Module(18, 26, 14, 33);
 
 
