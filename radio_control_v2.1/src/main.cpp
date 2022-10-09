@@ -50,7 +50,6 @@ byte SYNC_WORD = 0x12;          // set LoRa sync word to 0x12...NOTE: value 0x34
 int8_t POWER = 15;              // 2 - 20dBm
 float F_OFFSET = 1250 / 1e6;    // Hz - optional if you want to offset the frequency
 float RSSI = 0;
-
 SX1276 radio = new Module(18, 26, 14, 33);  // Module(CS, DI0, RST, ??); - Module(18, 26, 14, 33);
 
 ///////////////////////Inputs/outputs///////////////////////
@@ -113,7 +112,7 @@ int ThrottleValues[arraySize] = {-2, -1, 0, 1, 2, 3, 3, 3, 3, 99};
 ///////////////////////////////////////////////////////////
 
 /////////////////////Loop Timing variables///////////////////////
-const long readingInterval = 50;
+const long readingInterval = 500;
 const long weatherInterval = 5000;
 const long transmitInterval = 2000;
 const long OLEDInterval = 500;
@@ -317,6 +316,8 @@ void getWeatherReadings(){
     RadioControlData.TempF=TempF;
 }
 void handleIncomingMsg(){
+  // tractor receive statement
+  //int state = radio.receive(tx_RadioControlData_buf, RadioControlData_message_len);
     int state = radio.receive(tx_TractorData_buf, TractorData_message_len);
     if (state == RADIOLIB_ERR_NONE) {    // packet was successfully received
       prev_time_radio_signal = millis();  
@@ -446,13 +447,13 @@ int classifyRange(int a[], int x){
 void print_Info_messages(){
     printf("\n");  
     printf("\n");    
-    Serial.print(F("Last Message Info: "));
-    Serial.print(F("Datarate: "));  Serial.print(radio.getDataRate());  Serial.print(F(" bps "));
+    Serial.print(F("RC data sent: "));
+    //Serial.print(F("Datarate: "));  Serial.print(radio.getDataRate());  Serial.print(F(" bps "));
     Serial.print(", RSSI: "); Serial.print(RSSI);
-    Serial.print(F(", RSSI color: "));  Serial.print(ledcolors[RSSI_test]);    
-    Serial.print(F(", throttle: "));  Serial.print(RadioControlData.throttle_val);
+    //Serial.print(F(", RSSI color: "));  Serial.print(ledcolors[RSSI_test]);    
+    //Serial.print(F(", throttle: "));  Serial.print(RadioControlData.throttle_val);
     //Serial.print(F(", POT X: "));  Serial.print(throttle_val);
-    Serial.print(F(", steering: "));  Serial.print(RadioControlData.steering_val);     
+    //Serial.print(F(", steering: "));  Serial.print(RadioControlData.steering_val);     
     //Serial.print(F(", POT Y: "));  Serial.print(steering_val);
     // Serial.print(F(", steering_val_ROS: "));  Serial.print(steering_val_ROS);
     //Serial.print("Temp *C = "); Serial.print(temperature);
@@ -460,15 +461,16 @@ void print_Info_messages(){
     //Serial.print("Pressure (hPa) = "); Serial.print(pressure);
     //Serial.print("Approx. Altitude (m) = "); Serial.print(altitude);
     //Serial.print(", Humidity = "); Serial.print(humidity); Serial.println(" % ");
-
-    printf("\n");   
-
-    Serial.print(F("Last tractor data received: "));
-    Serial.print(" speed: "); Serial.print(TractorData.speed);
-    Serial.print(", heading: "); Serial.print(TractorData.heading);
-    Serial.print(", voltage: "); Serial.print(TractorData.voltage);
-    Serial.print(", TractorData.counter: "); Serial.print(TractorData.counter);
     Serial.print(", RadioControlData.counter: "); Serial.print(RadioControlData.counter);
+
+    //printf("\n");   
+
+    Serial.print(F(", tractor data received: "));
+    //Serial.print(" speed: "); Serial.print(TractorData.speed);
+    //Serial.print(", heading: "); Serial.print(TractorData.heading);
+    //Serial.print(", voltage: "); Serial.print(TractorData.voltage);
+    Serial.print(", TractorData.counter: "); Serial.print(TractorData.counter);
+
     printf("\n");
     printf("\n");     
     //Serial.print(F("[SX1278] RSSI:\t\t\t"));  Serial.print(RSSI);  Serial.println(F(" dBm"));
