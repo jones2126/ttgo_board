@@ -27,16 +27,17 @@ ref: https://github.com/jgromes/RadioLib/wiki/Default-configuration#sx127xrfm9x-
 
 // functions below loop() - required to tell VSCode compiler to look for them below.  Not required when using Arduino IDE
 void startSerial();
+void initLEDs();
 void InitLoRa();
+void startOLED();
+void startBME();
 void getControlReadings();
 void getWeatherReadings();
 void handleIncomingMsg();
 void sendOutgoingMsg();
-void startOLED();
 void displayOLED();
 float setSteering(int x);
-void startBME();
-void checkRSSIstatus();
+void displayLEDstatus();
 int classifyRange(int a[], int);
 void print_Info_messages();
 
@@ -56,7 +57,7 @@ SX1276 radio = new Module(18, 26, 14, 33);  // Module(CS, DI0, RST, ??); - Modul
 //Sensor Pin definitions
 #define POT_X 36
 #define POT_Y 37
-#define voltage_pin 25
+#define voltage_pin 34
 int led = 2;
 
 //OLED definitions
@@ -79,11 +80,13 @@ float altitude = 0;
 
 // LED bar status related
 #define NUM_LEDS 4
-#define DATA_PIN 12
+#define LED_PIN 12
 #define BRIGHTNESS 30  // 0 off, 255 highest
 
-// RSSI 
+// LoRa and RSSI 
 int return_test = 0;
+int RSSI_test = 9;
+int sentStatus = 0;
 
 float steering_val = 0;
 float steering_val_ROS = 0;
@@ -95,12 +98,13 @@ int voltage_val = 0;
 
 
 // used classifying results
-const int arraySize = 10; // size of array a
+#define arraySize 10 // size of array a
 int SteeeringPts[arraySize] = {0, 130, 298, 451, 1233, 2351, 3468, 4094, 4096, 4097}; 
 float SteeeringValues[] = {-45, -30, -15, 0, 15, 30, 45, 45, 45, 99};
 // although RSSI is presented as a negative, in order to use this array we will pass the ABS of RSSI ref: https://www.studocu.com/row/document/institute-of-space-technology/calculus/why-rssi-is-in-negative/3653793
 int RSSIPts[arraySize] = {0, 70, 90, 120, 124, 128, 132, 136, 140, 160}; 
-CRGB RSSIPtsValues[arraySize] = {CRGB::Green, CRGB::Green, CRGB::Yellow, CRGB::Yellow, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::White};
+CRGB RSSIPtsValues[arraySize] = {CRGB::Green, CRGB::Green, CRGB::Yellow, CRGB::Yellow, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::Red, CRGB::White, CRGB::White};
+String ledcolors[arraySize] = { "green", "green", "yellow", "yellow","red", "red","red","red","white","white"};
 
 int ThrottlePts[arraySize] = {0, 780, 1490, 2480, 3275, 4000, 4001, 4002, 4096, 4097}; 
 //char ThrottleValues[arraySize][3] = {"-2", "-1", "0", "1", "2", "3", "3", "3", "3", "99"};
@@ -114,6 +118,7 @@ const long weatherInterval = 5000;
 const long transmitInterval = 2000;
 const long OLEDInterval = 500;
 const long infoInterval = 3000;  // 100 = 1/10 of a second (i.e. 10 Hz) 3000 = 3 seconds
+const long radioSignalInterval = 200;  // 100 = 1/10 of a second (i.e. 10 Hz) 3000 = 3 seconds
 
 //const long steerInterval = 50;  // 100 10 HZ, 50 20Hz, 20 = 50 Hz
 //const long safetyInterval = 1000; 
@@ -126,6 +131,7 @@ unsigned long prev_time_weather = 0;
 unsigned long prev_time_xmit = 0;
 unsigned long prev_time_OLED = 0;
 unsigned long prev_time_printinfo = 0;
+unsigned long prev_time_radio_signal = 0;
 ////////////////////////////////////////////////////////////////
 
 
@@ -161,17 +167,18 @@ CRGB leds[NUM_LEDS];
 
 
 // int sensor_value = -99;
-void setup() {
+void setup(){
   pinMode(led, OUTPUT);
   startSerial();
+  initLEDs();
   InitLoRa();
   startOLED();
   startBME();
 }
-void loop() {
+void loop(){
   unsigned long currentMillis = millis();
   handleIncomingMsg();
-  checkRSSIstatus();
+
   if ((currentMillis - prev_time_reading)   >= readingInterval)   {getControlReadings();}
   if ((currentMillis - prev_time_weather)    >= weatherInterval)  {getWeatherReadings();}
   if ((currentMillis - prev_time_xmit)       >= transmitInterval) {sendOutgoingMsg();}
@@ -184,6 +191,14 @@ void startSerial(){
       delay(1000);   // loop forever and don't continue
   }
   Serial.println("starting: radio_control_v2.1");
+}
+void initLEDs(){
+    FastLED.addLeds<NEOPIXEL, LED_PIN>(leds, NUM_LEDS);  
+    //FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+    FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
+    FastLED.setBrightness(BRIGHTNESS);
+    FastLED.clear();
+    FastLED.show(); 
 }
 void InitLoRa(){
   Serial.print(F("[SX1276] Initializing ... "));
@@ -305,7 +320,10 @@ void getWeatherReadings(){
 void handleIncomingMsg(){
     int state = radio.receive(tx_TractorData_buf, TractorData_message_len);
     if (state == RADIOLIB_ERR_NONE) {    // packet was successfully received
-      RSSI = radio.getRSSI();
+
+      prev_time_radio_signal = millis();  
+      RSSI = abs(radio.getRSSI());
+      displayLEDstatus();      
       // set a switch or timer that you received a message and move the RSSI category check to here
 
       memcpy(&TractorData, tx_TractorData_buf, TractorData_message_len);
@@ -315,10 +333,14 @@ void handleIncomingMsg(){
       digitalWrite(led, HIGH);
       } else if (state == RADIOLIB_ERR_RX_TIMEOUT) {
             // timeout occurred while waiting for a packet
-            Serial.println(F("nothing received, waiting!"));
+            Serial.print(F("waiting..."));
+            RSSI = 999;
+            displayLEDstatus();            
             } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
                   // packet was received, but is malformed
                   Serial.println(F("nothing received, no timeout, but CRC error!"));
+                  RSSI = 999;
+                  displayLEDstatus();                   
                   } else {
                         // some other error occurred
                         Serial.print(F("nothing received, no timeout, printing failed code "));
@@ -333,8 +355,8 @@ void sendOutgoingMsg(){
     //Serial.println("Sent a reply");
     if (state == RADIOLIB_ERR_NONE) {
         // the packet was successfully transmitted
-        // print measured data rate
-        Serial.print(F("Datarate: "));  Serial.print(radio.getDataRate());  Serial.print(F(" bps "));
+        sentStatus = 1;
+        
         } else if (state == RADIOLIB_ERR_PACKET_TOO_LONG) {
               // the supplied packet was longer than 256 bytes
               Serial.println(F("too long!"));
@@ -373,7 +395,7 @@ void displayOLED(){
   display.setTextSize(1);
   display.print("Control Readings");
   display.setCursor(0,17);  display.print("RC Volt:");  display.setCursor(58,17); display.print(voltage_val);  
-  display.setCursor(0,27);  display.print("RSSI:");     display.setCursor(58,27); display.print(radio.getRSSI());
+  display.setCursor(0,27);  display.print("RSSI:");     display.setCursor(58,27); display.print(RSSI);
   display.setCursor(0,37);  display.print("Throttle:"); display.setCursor(58,37); display.print(throttle_val_ROS);
   display.setCursor(0,47);  display.print("Steering:"); display.setCursor(58,47); display.print(steering_val_ROS);
   display.setCursor(0,57);  display.print("Mode SW:");  display.setCursor(58,57); display.print(switch_mode);  
@@ -393,15 +415,12 @@ void startBME(){
     while (1) delay(1000);    
   }
 }
-void checkRSSIstatus(){
-    RSSI = abs(radio.getRSSI());
-    return_test = classifyRange(RSSIPts, RSSI); 
-    FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
-    leds[0] = RSSIPtsValues[return_test];
+void displayLEDstatus(){
+    RSSI_test = classifyRange(RSSIPts, RSSI); 
+    leds[0] = RSSIPtsValues[RSSI_test];
     leds[1] = CRGB::Blue;
     leds[2] = CRGB::Blue;
     leds[3] = CRGB::Blue;
-    FastLED.setBrightness(BRIGHTNESS);
     FastLED.show();
 }
 int classifyRange(int a[], int x){ 
@@ -431,26 +450,32 @@ int classifyRange(int a[], int x){
     return classification_ptr;        
 }
 void print_Info_messages(){
+    printf("\n");  
+    printf("\n");    
     Serial.print(F("Last Message Info: "));
-    Serial.print(" RSSI: "); Serial.print(RSSI);  
+    Serial.print(F("Datarate: "));  Serial.print(radio.getDataRate());  Serial.print(F(" bps "));
+    Serial.print(", RSSI: "); Serial.print(RSSI);
+    Serial.print(F(", RSSI color: "));  Serial.print(ledcolors[RSSI_test]);    
     Serial.print(F(", throttle: "));  Serial.print(RadioControlData.throttle_val);
-    Serial.print(F(", POT X: "));  Serial.print(throttle_val);
+    //Serial.print(F(", POT X: "));  Serial.print(throttle_val);
     Serial.print(F(", steering: "));  Serial.print(RadioControlData.steering_val);     
-    Serial.print(F(", POT Y: "));  Serial.print(steering_val);
+    //Serial.print(F(", POT Y: "));  Serial.print(steering_val);
     // Serial.print(F(", steering_val_ROS: "));  Serial.print(steering_val_ROS);
     //Serial.print("Temp *C = "); Serial.print(temperature);
-    Serial.print(", Temp *F = "); Serial.print(TempF);  // Convert temperature to Fahrenheit
+    //Serial.print(", Temp *F = "); Serial.print(TempF);  // Convert temperature to Fahrenheit
     //Serial.print("Pressure (hPa) = "); Serial.print(pressure);
     //Serial.print("Approx. Altitude (m) = "); Serial.print(altitude);
-    Serial.print(", Humidity = "); Serial.print(humidity); Serial.println(" % ");
+    //Serial.print(", Humidity = "); Serial.print(humidity); Serial.println(" % ");
+
     printf("\n");   
 
-    Serial.print(F("Last Message Received: "));
+    Serial.print(F("Last tractor data received: "));
     Serial.print(" speed: "); Serial.print(TractorData.speed);
     Serial.print(", heading: "); Serial.print(TractorData.heading);
     Serial.print(", voltage: "); Serial.print(TractorData.voltage);
     Serial.print(", counter: "); Serial.print(TractorData.counter);
-    printf("\n");   
+    printf("\n");
+    printf("\n");     
     //Serial.print(F("[SX1278] RSSI:\t\t\t"));  Serial.print(RSSI);  Serial.println(F(" dBm"));
     // print the SNR (Signal-to-Noise Ratio) of the last received packet
     //Serial.print(F("[SX1278] SNR:\t\t\t"));  Serial.print(radio.getSNR());  Serial.println(F(" dB"));
@@ -458,4 +483,5 @@ void print_Info_messages(){
     //Serial.print(F("[SX1278] Frequency error:\t"));  Serial.print(radio.getFrequencyError());  Serial.println(F(" Hz"));
     // print the data from the received message   
     //Serial.println();
+    prev_time_printinfo = millis();  // reset the timer
 }
