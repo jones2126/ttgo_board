@@ -180,7 +180,7 @@ void loop(){
   if ((currentMillis - prev_time_weather)    >= weatherInterval)  {getWeatherReadings();}
   if ((currentMillis - prev_time_xmit)       >= transmitInterval) {sendOutgoingMsg();}
   if ((currentMillis - prev_time_OLED)       >= OLEDInterval)     {displayOLED();}
-  if ((currentMillis - prev_time_printinfo)  >= infoInterval)     {print_Info_messages();}     
+ // if ((currentMillis - prev_time_printinfo)  >= infoInterval)     {print_Info_messages();}     
 }
 void startSerial(){
   Serial.begin(115200);
@@ -349,7 +349,7 @@ void displayOLED(){
   display.setCursor(0,17);  display.print("RC Volt:");  display.setCursor(58,17); display.print(voltage_val);  
   //display.setCursor(0,27);  display.print("RSSI:");     display.setCursor(58,27); display.print(radio.getRSSI());
   display.setCursor(0,27);  display.print("RSSI:");     display.setCursor(58,27); display.print(RSSI);
-  display.setCursor(0,37);  display.print("Throttle:"); display.setCursor(58,37); display.print(throttle_val_ROS);
+  display.setCursor(0,37);  display.print("Throttle:"); display.setCursor(58,37); display.print(RadioControlData.throttle_val);
   display.setCursor(0,47);  display.print("Steering:"); display.setCursor(58,47); display.print(steering_val_ROS);
   //display.setCursor(0,57);  display.print("Mode SW:");  display.setCursor(58,57); display.print(switch_mode);
   display.setCursor(0,57);  display.print("T cntr:");  display.setCursor(58,57); display.print(TractorData.counter);   
