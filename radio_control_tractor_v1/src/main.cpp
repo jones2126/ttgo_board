@@ -25,6 +25,9 @@ void getTractorData();
 void sendOutgoingMsg();
 void handleIncomingMsg();
 void print_Info_messages();
+double computePID(float inp);
+void steerVehicle();
+float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
 
 // radio related
 float FREQUENCY = 915.0;  // MHz - EU 433.5; US 915.0
@@ -68,28 +71,76 @@ uint8_t tx_TractorData_buf[sizeof(TractorData)] = {0};
 const long readingInterval = 100;
 const long transmitInterval = 500;
 const long infoInterval = 2000;
+const long steerInterval = 50;  // 100 10 HZ, 50 20Hz, 20 = 50 Hz
 unsigned long prev_time_reading = 0;
 unsigned long prev_time_xmit = 0;
 unsigned long prev_time_printinfo = 0;
+unsigned long prev_time_steer = 0;
 /////////////////////////////////////////////////////////////////
 
+///////////////////Steering variables///////////////////////
+float safety_margin_pot = 400; // reduce this once I complete field testing
+float left_limit_pot = 3499 - safety_margin_pot;  // the actual extreme limit is 3499
+float left_limit_angle = -45; // this is a guess - change based on field testing
+float right_limit_pot = 431 + safety_margin_pot;  // the actual extreme limit is 431
+float right_limit_angle = 45;  // this is a guess - change based on field testing
+float steering_target_angle = 0;
+float steering_target_pot = 0;
+float steering_actual_angle = 0;
+float steering_actual_pot = 0;
+float steer_effort = 0;
+float tolerance = 0.4;  // need to adjust this based on angles
+const int motor_power_limit = 150;
+/////////////////////////////////////////////////////////////
+
+/////////////////// PID variables ///////////////////////
+float kp=0; 
+float ki=0.0; 
+float kd=0; 
+unsigned long currentTime, previousTime;
+float elapsedTime;
+float error;
+float lastError;
+float output, setPoint;
+float cumError, rateError;
+///////////////////////////////////////////////////////
+
+///////////////////////Inputs/outputs///////////////////////
+int steer_angle_pin = 38;   // pin for steer angle sensor
+int PWMPin = 25;
+int DIRPin = 12;
+int ledState = LOW;         // ledState used to set the LED
+//variables for testing to the right and back again
+int test_sw = 0;  // turn the wheel all the way to the left before starting this test
+unsigned long test_start_time = 0; 
+float test_duration = 0;
+///////////////////////////////////////////////////////////
+
+
+
 void setup() {
+  pinMode(steer_angle_pin,INPUT);
+  pinMode(PWMPin, OUTPUT);
+  pinMode(DIRPin, OUTPUT);  
   startSerial();
   InitLoRa();
 }
 void loop() {
     unsigned long currentMillis = millis();
     handleIncomingMsg();
-    if ((currentMillis - prev_time_reading) >= readingInterval)   {getTractorData();}
-    if ((currentMillis - prev_time_xmit)    >= transmitInterval)  {sendOutgoingMsg();}
-    if ((currentMillis - prev_time_printinfo)  >= infoInterval)   {print_Info_messages();}       
+    if ((currentMillis - prev_time_steer)      >= steerInterval)     {steerVehicle();}
+    if ((currentMillis - prev_time_reading)    >= readingInterval)   {getTractorData();}
+    if ((currentMillis - prev_time_xmit)       >= transmitInterval)  {sendOutgoingMsg();}
+    if ((currentMillis - prev_time_printinfo)  >= infoInterval)      {print_Info_messages();}       
 }
 void startSerial(){
   Serial.begin(115200);
   while (!Serial) {
       delay(1000);   // loop forever and don't continue
   }
+  delay(7000);
   Serial.println("starting: radio_control_tractor_v1");
+
 }
 void InitLoRa(){
 
@@ -153,7 +204,7 @@ void getTractorData(){
 }
 void sendOutgoingMsg(){
     digitalWrite(led, HIGH);
-    Serial.print(F(", xmit"));
+    //Serial.print(F(", xmit"));
     memcpy(tx_TractorData_buf, &TractorData, TractorData_message_len);
     int state = radio.transmit(tx_TractorData_buf, TractorData_message_len);
     if (state == RADIOLIB_ERR_NONE) {
@@ -195,22 +246,91 @@ void print_Info_messages(){
     //Serial.print("heading: "); Serial.print(TractorData.heading);
     //Serial.print("voltage: "); Serial.print(TractorData.voltage);
     Serial.print("Tractr ctr: "); Serial.print(TractorData.counter);
-    Serial.print(", RC ctr: "); Serial.print(RadioControlData.counter);    
+    //Serial.print(", RC ctr: "); Serial.print(RadioControlData.counter);    
     // print measured data rate
-    Serial.print(F(", BPS "));
-    Serial.print(radio.getDataRate());
+    //Serial.print(F(", BPS "));
+    //Serial.print(radio.getDataRate());
     //Serial.print(F(" bps"));
     //Serial.println(F("packet received!"));
     // print the RSSI (Received Signal Strength Indicator) of the last received packet
-    Serial.print(F(", RSSI: "));  Serial.print(radio.getRSSI());  
+    //Serial.print(F(", RSSI: "));  Serial.print(radio.getRSSI());  
     //Serial.print(F(", SNR: "));  Serial.print(radio.getSNR());  
     //Serial.print(F(", dB"));
     //Serial.print(F(", Freq error: ")); Serial.print(radio.getFrequencyError());  
     //Serial.print(F(", Hz"));
     Serial.print(", steering: "); Serial.print(RadioControlData.steering_val);
-    Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
+    //Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
     //Serial.print(", press_norm: "); Serial.print(RadioControlData.press_norm);
     //Serial.print(", press_hg: "); Serial.print(RadioControlData.press_hg);
     //Serial.print(", temp: "); Serial.print(RadioControlData.temp);
+    //setPoint
+    Serial.print(", setPoint: "); Serial.print(setPoint);
+    Serial.print(", steering_actual_angle: "); Serial.print(steering_actual_angle);
+    Serial.print(", error: "); Serial.print(error);
+    Serial.print(", steer effort: "); Serial.print(steer_effort);
     printf("\n"); 
+}
+void steerVehicle(){
+  /*
+    steering_actual_pot = get_angle(1);
+    steering_target_pot = analogRead(target_pot_pin);
+    steering_target_angle = mapfloat(steering_target_pot, 0, 4095, left_limit_angle, right_limit_angle);
+    setPoint = steering_target_angle;   
+  */
+    steering_actual_pot=analogRead(steer_angle_pin); 
+    //kp = 16; ki = 0.00; kd = 0;
+    kp = 16; ki = 0.0079; kd = 2468;
+    /*
+    steering_target_pot = analogRead(target_pot_pin);
+    steering_target_angle = mapfloat(steering_target_pot, 0, 4095, left_limit_angle, right_limit_angle);
+    setPoint = steering_target_angle; 
+*/    
+    setPoint = RadioControlData.steering_val;
+    //Serial.print("e: "); Serial.println(error); 
+    /* The next statement is used to convert the analog potentiometer value to an angle, based on the steering 
+    characteristics of the vehicle. */
+    steering_actual_angle = mapfloat(steering_actual_pot, left_limit_pot, right_limit_pot, left_limit_angle, right_limit_angle);
+    steer_effort = computePID(steering_actual_angle);
+
+   /*  Safety clamp:  The max_power_limit could be as high as 255 which 
+    would deliver 12+ volts to the steer motor.  I have reduced the highest setting that allows the wheels
+    to be moved easily while sitting on concrete (e.g. motor_power_limit = 150 )  */
+    if (steer_effort < (motor_power_limit*-1)){steer_effort = (motor_power_limit*-1);}  //clamp the values of steer_effort
+    if (steer_effort > motor_power_limit){steer_effort = motor_power_limit;} // motor_power_limit
+   
+    if(error > tolerance){     
+        //Serial.print("e-r: "); Serial.print(error);  
+        //Serial.print("s-r: "); Serial.println(steer_effort);                 
+        digitalWrite(DIRPin, HIGH);   // steer right - channel B led is lit; Red wire (+) to motor; positive voltage
+        if ((steering_actual_pot > left_limit_pot) || (steering_actual_pot < right_limit_pot)) {steer_effort = 0;}  // safety check
+        analogWrite(PWMPin, steer_effort);
+        } 
+
+    else if(error < (tolerance*-1)){   
+        //Serial.print("e-l: "); Serial.print(error); 
+        //Serial.print("s-l: "); Serial.println(steer_effort);   
+        digitalWrite(DIRPin, LOW); // steer left - channel A led is lit; black wire (-) to motor; negative voltage
+        if ((steering_actual_pot > left_limit_pot) || (steering_actual_pot < right_limit_pot)) {steer_effort = 0;}  // safety check
+        analogWrite(PWMPin, abs(steer_effort));
+        }
+    else {
+        steer_effort = 0;
+        analogWrite(PWMPin, steer_effort);       // Turn the motor off  
+        }    
+    prev_time_steer = millis();
+}  // end of steerVehicle
+double computePID(float inp){     
+  // ref: https://www.teachmemicro.com/arduino-pid-control-tutorial/
+      currentTime = millis();                                     // get current time
+      elapsedTime = (double)(currentTime - previousTime);         // compute time elapsed from previous computation
+      error = setPoint - inp;                                     // determine error
+      cumError += error * elapsedTime;                            // compute integral
+      rateError = (error - lastError)/elapsedTime;                // compute derivative
+      float out = ((kp*error) + (ki*cumError) + (kd*rateError)); // PID output               
+      lastError = error;                                          // remember current error
+      previousTime = currentTime;                                 // remember current time
+      return out;                                                 // have function return the PID output
+}
+float mapfloat(float x, float in_min, float in_max, float out_min, float out_max){
+  return (x - in_min)*(out_max - out_min) / (in_max - in_min) + out_min;
 }
