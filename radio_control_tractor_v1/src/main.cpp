@@ -50,7 +50,7 @@ void handleIncomingMsg();
 // radio related
 float FREQUENCY = 915.0;  // MHz - EU 433.5; US 915.0
 float BANDWIDTH = 125;  // 10.4, 15.6, 20.8, 31.25, 41.7, 62.5, 125, 250 and 500 kHz.
-uint8_t SPREADING_FACTOR = 8;  // 6 - 12; higher is slower; started at 7
+uint8_t SPREADING_FACTOR = 10;  // 6 - 12; higher is slower; started at 7
 uint8_t CODING_RATE = 7;  // 5 - 8; high data rate / low range -> low data rate / high range
 byte SYNC_WORD = 0x12; // set LoRa sync word to 0x12...NOTE: value 0x34 is reserved and should not be used
 float F_OFFSET = 1250 / 1e6;  // Hz - optional if you want to offset the frequency
@@ -197,27 +197,28 @@ void sendOutgoingMsg(){
 }
 void handleIncomingMsg(){
     int state = radio.receive(tx_RadioControlData_buf, RadioControlData_message_len);
+    //Serial.print(F("state (")); Serial.print(state); Serial.println(F(")"));
     if (state == RADIOLIB_ERR_NONE) {
       // packet was successfully received
       memcpy(&RadioControlData, tx_RadioControlData_buf, RadioControlData_message_len);
-      Serial.println(F("packet received!"));
+      //Serial.println(F("packet received!"));
       // print the RSSI (Received Signal Strength Indicator) of the last received packet
       Serial.print(F("RSSI: "));  Serial.print(radio.getRSSI());  
-      Serial.print(F(", SNR: "));  Serial.print(radio.getSNR());  
+      //Serial.print(F(", SNR: "));  Serial.print(radio.getSNR());  
       //Serial.print(F(", dB"));
-      Serial.print(F(", Freq error: ")); Serial.print(radio.getFrequencyError());  
+      //Serial.print(F(", Freq error: ")); Serial.print(radio.getFrequencyError());  
       //Serial.print(F(", Hz"));
-      Serial.print(", steering: "); Serial.print(RadioControlData.steering_val);
-      Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
-      Serial.print(", press_norm: "); Serial.print(RadioControlData.press_norm);
-      Serial.print(", press_hg: "); Serial.print(RadioControlData.press_hg);
-      Serial.print(", temp: "); Serial.print(RadioControlData.temp);
+      //Serial.print(", steering: "); Serial.print(RadioControlData.steering_val);
+      //Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
+      //Serial.print(", press_norm: "); Serial.print(RadioControlData.press_norm);
+      //Serial.print(", press_hg: "); Serial.print(RadioControlData.press_hg);
+      //Serial.print(", temp: "); Serial.print(RadioControlData.temp);
       Serial.print(", RadioControlData.counter: "); Serial.print(RadioControlData.counter);
       printf("\n"); 
       digitalWrite(led, HIGH);
       } else if (state == RADIOLIB_ERR_RX_TIMEOUT) {
             // timeout occurred while waiting for a packet
-            Serial.print(F(", pending packet"));
+            Serial.print(F("waiting..."));
             } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
                   // packet was received, but is malformed
                   Serial.println(F("nothing received, no timeout, but CRC error!"));
