@@ -36,7 +36,6 @@ void getWeatherReadings();
 void handleIncomingMsg();
 void sendOutgoingMsg();
 void displayOLED();
-float setSteering(int x);
 void displayLEDstatus();
 int classifyRange(int a[], int);
 void print_Info_messages();
@@ -44,7 +43,7 @@ void print_Info_messages();
 // radio related
 float FREQUENCY = 915.0;        // MHz - EU 433.5; US 915.0
 float BANDWIDTH = 125;          // 10.4, 15.6, 20.8, 31.25, 41.7, 62.5, 125, 250 and 500 kHz.
-uint8_t SPREADING_FACTOR = 8;  // 6 - 12; higher is slower; started with 7, 8 (barely successful)
+uint8_t SPREADING_FACTOR = 10;  // 6 - 12; higher is slower; started with 7, 8 (barely successful)
 uint8_t CODING_RATE = 7;        // 5 - 8; high data rate / low range -> low data rate / high range; the example started with 5
 byte SYNC_WORD = 0x12;          // set LoRa sync word to 0x12...NOTE: value 0x34 is reserved and should not be used
 int8_t POWER = 15;              // 2 - 20dBm
@@ -114,7 +113,7 @@ int ThrottleValues[arraySize] = {-2, -1, 0, 1, 2, 3, 3, 3, 3, 99};
 /////////////////////Loop Timing variables///////////////////////
 const long readingInterval = 500;
 const long weatherInterval = 5000;
-const long transmitInterval = 2000;
+const long transmitInterval = 333;
 const long OLEDInterval = 500;
 const long infoInterval = 3000;  // 100 = 1/10 of a second (i.e. 10 Hz) 3000 = 3 seconds
 const long radioSignalInterval = 200;  // 100 = 1/10 of a second (i.e. 10 Hz) 3000 = 3 seconds
@@ -256,51 +255,8 @@ void getControlReadings(){
   steering_val = analogRead(POT_Y);
   return_test = classifyRange(SteeeringPts, steering_val); 
   RadioControlData.steering_val = SteeeringValues[return_test];
-  //steering_val_ROS = setSteering(steering_val); 
   //RadioControlData.steering_val = steering_val_ROS; 
   voltage_val = analogRead(voltage_pin);  
-}
-float setSteering(int x){
-/*
-		        angular-z		      pot	
-		      start	  end	    start	end
-1	-1.00	  -1.00	  -1.00	    0	    0
-2	-0.75	  -1.00	  -0.75	    1	   16
-3	-0.50	  -0.75	  -0.50	   17	  113
-4	-0.25	  -0.50	  -0.25	  114	  209
-5	0.00	  0.00	   0.00	  210	  246
-6	0.25	  0.00	   0.25	  247 	830
-7	0.50	  0.25	   0.50	  831	 1502
-8	0.75	  0.50	   0.75	 1503	 2446
-9	1.00	  0.75	   1.00	 2447	 4095
-*/
-    float steering_setting;  
-    if (x >=0 && x <=129){
-        steering_setting = -1.00;
-        } else if (x >=130 && x <=297){
-            steering_setting = -0.67;
-            } else if (x >=298 && x <=450){
-                  steering_setting = -0.33;
-                  } else if (x >=451 && x <=1232){
-                        steering_setting = 0.0;
-                        } else if (x >=1233 && x <=2350){
-                              steering_setting = 0.33;
-                              } else if (x >=2351 && x <=3467){
-                                    steering_setting = 0.67;
-                                    } else if (x >=3468 && x <=4093){
-                                          steering_setting = 1.0;
-                                          } else if (x >=4094 && x <=4095){
-                                                steering_setting = 1.0;
-                                                } else if (x >=4096 && x <=4097){
-                                                      steering_setting = 1.0;
-                                                      }
-                                                      else {
-                                                        Serial.println("steering error");
-                                                        steering_setting = 0;
-                                                      }
-    return steering_setting;                     
-
-
 }
 void getWeatherReadings(){
     //light_val = analogRead(light_sensor);  // currently do not have one installed
@@ -319,6 +275,7 @@ void handleIncomingMsg(){
   // tractor receive statement
   //int state = radio.receive(tx_RadioControlData_buf, RadioControlData_message_len);
     int state = radio.receive(tx_TractorData_buf, TractorData_message_len);
+    //Serial.print(F("state (")); Serial.print(state); Serial.println(F(")"));
     if (state == RADIOLIB_ERR_NONE) {    // packet was successfully received
       prev_time_radio_signal = millis();  
       RSSI = abs(radio.getRSSI());
@@ -390,11 +347,14 @@ void displayOLED(){
   display.setTextSize(1);
   display.print("Control Readings");
   display.setCursor(0,17);  display.print("RC Volt:");  display.setCursor(58,17); display.print(voltage_val);  
+  //display.setCursor(0,27);  display.print("RSSI:");     display.setCursor(58,27); display.print(radio.getRSSI());
   display.setCursor(0,27);  display.print("RSSI:");     display.setCursor(58,27); display.print(RSSI);
   display.setCursor(0,37);  display.print("Throttle:"); display.setCursor(58,37); display.print(throttle_val_ROS);
   display.setCursor(0,47);  display.print("Steering:"); display.setCursor(58,47); display.print(steering_val_ROS);
-  display.setCursor(0,57);  display.print("Mode SW:");  display.setCursor(58,57); display.print(switch_mode);  
+  //display.setCursor(0,57);  display.print("Mode SW:");  display.setCursor(58,57); display.print(switch_mode);
+  display.setCursor(0,57);  display.print("T cntr:");  display.setCursor(58,57); display.print(TractorData.counter);   
   display.display();
+  //  Serial.print(", TractorData.counter: "); Serial.print(TractorData.counter);
 }
 void startBME(){
   Serial.println("In startBME function");
@@ -446,10 +406,16 @@ int classifyRange(int a[], int x){
 }
 void print_Info_messages(){
     printf("\n");  
-    printf("\n");    
-    Serial.print(F("RC data sent: "));
+    printf("\n");   
+    Serial.print(F("last tractor data: "));
+    //Serial.print(" speed: "); Serial.print(TractorData.speed);
+    //Serial.print(", heading: "); Serial.print(TractorData.heading);
+    //Serial.print(", voltage: "); Serial.print(TractorData.voltage);
+    Serial.print(", TractorData.counter: "); Serial.print(TractorData.counter); 
+    Serial.print(F(" RC data sent: "));
     //Serial.print(F("Datarate: "));  Serial.print(radio.getDataRate());  Serial.print(F(" bps "));
-    Serial.print(", RSSI: "); Serial.print(RSSI);
+    //Serial.print(", RSSI: "); Serial.print(RSSI);  //radio.getRSSI()
+    Serial.print(", RSSI: "); Serial.print(radio.getRSSI()); 
     //Serial.print(F(", RSSI color: "));  Serial.print(ledcolors[RSSI_test]);    
     //Serial.print(F(", throttle: "));  Serial.print(RadioControlData.throttle_val);
     //Serial.print(F(", POT X: "));  Serial.print(throttle_val);
@@ -465,11 +431,7 @@ void print_Info_messages(){
 
     //printf("\n");   
 
-    Serial.print(F(", tractor data received: "));
-    //Serial.print(" speed: "); Serial.print(TractorData.speed);
-    //Serial.print(", heading: "); Serial.print(TractorData.heading);
-    //Serial.print(", voltage: "); Serial.print(TractorData.voltage);
-    Serial.print(", TractorData.counter: "); Serial.print(TractorData.counter);
+
 
     printf("\n");
     printf("\n");     
@@ -482,3 +444,12 @@ void print_Info_messages(){
     //Serial.println();
     prev_time_printinfo = millis();  // reset the timer
 }
+
+/*
+check tractor.counter
+- if the counter is not in line with the expected result then you are not receiving good data
+- assume the tractor is sending data a 1 packet per second (i.e. 1:1000 milliseconds)
+- ( current_tractor_counter - last_tractor_counter)/millis = age of counter
+- (1003 - 999) / (current_millis - last_received_millis)
+- 4 / 10 (seconds)
+*/
