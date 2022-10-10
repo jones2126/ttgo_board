@@ -25,28 +25,6 @@ void getTractorData();
 void sendOutgoingMsg();
 void handleIncomingMsg();
 
-
-/*
- * Begin method:
-    Carrier frequency: 915.0 MHz
-    Bit rate: 4.8 kbps
-    Frequency deviation: 5.0 kHz (single-sideband)
-    Receiver bandwidth: 156.2 kHz
-    Output power: 10 dBm
-    Preamble length: 16 bits
-    TCXO reference voltage: 1.6 V (SX126x module with TCXO)
-    LDO regulator mode: disabled (SX126x module with DC-DC power supply)
-
-#define SS 18 // GPIO18 -- SX1278's CS
-#define DI0 26 // GPIO26 -- SX1278's IRQ(Interrupt Request)
-#define RST 14 // GPIO14 -- SX1278's RESET
-
-#define SCK 5 // GPIO5 -- SX1278's SCK
-#define MISO 19 // GPIO19 -- SX1278's MISO
-#define MOSI 27 // GPIO27 -- SX1278's MOSI
-#define DI1 33 // GPIO33
-
- */
 // radio related
 float FREQUENCY = 915.0;  // MHz - EU 433.5; US 915.0
 float BANDWIDTH = 125;  // 10.4, 15.6, 20.8, 31.25, 41.7, 62.5, 125, 250 and 500 kHz.
@@ -57,8 +35,6 @@ float F_OFFSET = 1250 / 1e6;  // Hz - optional if you want to offset the frequen
 int8_t POWER = 15;  // 2 - 20dBm
 SX1276 radio = new Module(18, 26, 14, 33);  // Module(CS, DI0, RST, ??); - Module(18, 26, 14, 33);
 
-
-//int16_t packetnum = 0;  // packet counter, we increment per xmission
 int led = 2;
 
 struct RadioControlStruct{
@@ -70,6 +46,8 @@ struct RadioControlStruct{
   unsigned long counter;
   }RadioControlData;
 
+// tractorData 4 bytes/float = 5X4=20+ 4 bytes/unsigned long = 4 so 24 bytes; 3x/second or 72 bps
+
 uint8_t RadioControlData_message_len = sizeof(RadioControlData);
 uint8_t tx_RadioControlData_buf[sizeof(RadioControlData)] = {0};
 
@@ -79,6 +57,8 @@ struct TractorDataStruct{
   float voltage;
   unsigned long counter;
   }TractorData;
+
+// tractorData 4 bytes/float = 3X4=12 + 4 bytes/unsigned long = 4 so 16 bytes; 2x/second or 32 bps
 
 uint8_t TractorData_message_len = sizeof(TractorData);
 uint8_t tx_TractorData_buf[sizeof(TractorData)] = {0};
