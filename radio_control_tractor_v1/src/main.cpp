@@ -24,6 +24,7 @@ void InitLoRa();
 void getTractorData();
 void sendOutgoingMsg();
 void handleIncomingMsg();
+void print_Info_messages();
 
 // radio related
 float FREQUENCY = 915.0;  // MHz - EU 433.5; US 915.0
@@ -63,10 +64,14 @@ struct TractorDataStruct{
 uint8_t TractorData_message_len = sizeof(TractorData);
 uint8_t tx_TractorData_buf[sizeof(TractorData)] = {0};
 
+/////////////////////Loop Timing variables///////////////////////
 const long readingInterval = 100;
+const long transmitInterval = 500;
+const long infoInterval = 2000;
 unsigned long prev_time_reading = 0;
 unsigned long prev_time_xmit = 0;
-const long transmitInterval = 500;
+unsigned long prev_time_printinfo = 0;
+/////////////////////////////////////////////////////////////////
 
 void setup() {
   startSerial();
@@ -77,6 +82,7 @@ void loop() {
     handleIncomingMsg();
     if ((currentMillis - prev_time_reading) >= readingInterval)   {getTractorData();}
     if ((currentMillis - prev_time_xmit)    >= transmitInterval)  {sendOutgoingMsg();}
+    if ((currentMillis - prev_time_printinfo)  >= infoInterval)   {print_Info_messages();}       
 }
 void startSerial(){
   Serial.begin(115200);
@@ -152,15 +158,7 @@ void sendOutgoingMsg(){
     int state = radio.transmit(tx_TractorData_buf, TractorData_message_len);
     if (state == RADIOLIB_ERR_NONE) {
         // the packet was successfully transmitted
-        //Serial.println(F(" success!, sent the following data..."));
-        //Serial.print("speed: "); Serial.print(TractorData.speed);
-        //Serial.print("heading: "); Serial.print(TractorData.heading);
-        //Serial.print("voltage: "); Serial.print(TractorData.voltage);
-        Serial.print("TractorData.counter: "); Serial.print(TractorData.counter);
-        // print measured data rate
-        Serial.print(F(", Datarate: "));
-        Serial.print(radio.getDataRate());
-        Serial.print(F(" bps"));
+
         } else if (state == RADIOLIB_ERR_PACKET_TOO_LONG) {
               // the supplied packet was longer than 256 bytes
               Serial.println(F("too long!"));
@@ -178,33 +176,41 @@ void sendOutgoingMsg(){
 void handleIncomingMsg(){
     int state = radio.receive(tx_RadioControlData_buf, RadioControlData_message_len);
     //Serial.print(F("state (")); Serial.print(state); Serial.println(F(")"));
-    if (state == RADIOLIB_ERR_NONE) {
-      // packet was successfully received
+    if (state == RADIOLIB_ERR_NONE) {        // packet was successfully received
       memcpy(&RadioControlData, tx_RadioControlData_buf, RadioControlData_message_len);
-      //Serial.println(F("packet received!"));
-      // print the RSSI (Received Signal Strength Indicator) of the last received packet
-      Serial.print(F("RSSI: "));  Serial.print(radio.getRSSI());  
-      //Serial.print(F(", SNR: "));  Serial.print(radio.getSNR());  
-      //Serial.print(F(", dB"));
-      //Serial.print(F(", Freq error: ")); Serial.print(radio.getFrequencyError());  
-      //Serial.print(F(", Hz"));
-      //Serial.print(", steering: "); Serial.print(RadioControlData.steering_val);
-      //Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
-      //Serial.print(", press_norm: "); Serial.print(RadioControlData.press_norm);
-      //Serial.print(", press_hg: "); Serial.print(RadioControlData.press_hg);
-      //Serial.print(", temp: "); Serial.print(RadioControlData.temp);
-      Serial.print(", RadioControlData.counter: "); Serial.print(RadioControlData.counter);
-      printf("\n"); 
       digitalWrite(led, HIGH);
-      } else if (state == RADIOLIB_ERR_RX_TIMEOUT) {
-            // timeout occurred while waiting for a packet
+      } else if (state == RADIOLIB_ERR_RX_TIMEOUT) {   // timeout occurred while waiting for a packet
             Serial.print(F("waiting..."));
-            } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
-                  // packet was received, but is malformed
+            } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {  // packet was received, but is malformed
                   Serial.println(F("nothing received, no timeout, but CRC error!"));
-                  } else {
-                        // some other error occurred
+                  } else {   // some other error occurred
                         Serial.print(F("nothing received, no timeout, printing failed code "));
                         Serial.println(state);
                         }
+}
+void print_Info_messages(){
+    printf("\n"); 
+    //Serial.println(F(" success!, sent the following data..."));
+    //Serial.print("speed: "); Serial.print(TractorData.speed);
+    //Serial.print("heading: "); Serial.print(TractorData.heading);
+    //Serial.print("voltage: "); Serial.print(TractorData.voltage);
+    Serial.print("Tractr ctr: "); Serial.print(TractorData.counter);
+    Serial.print(", RC ctr: "); Serial.print(RadioControlData.counter);    
+    // print measured data rate
+    Serial.print(F(", BPS "));
+    Serial.print(radio.getDataRate());
+    //Serial.print(F(" bps"));
+    //Serial.println(F("packet received!"));
+    // print the RSSI (Received Signal Strength Indicator) of the last received packet
+    Serial.print(F(", RSSI: "));  Serial.print(radio.getRSSI());  
+    //Serial.print(F(", SNR: "));  Serial.print(radio.getSNR());  
+    //Serial.print(F(", dB"));
+    //Serial.print(F(", Freq error: ")); Serial.print(radio.getFrequencyError());  
+    //Serial.print(F(", Hz"));
+    Serial.print(", steering: "); Serial.print(RadioControlData.steering_val);
+    Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
+    //Serial.print(", press_norm: "); Serial.print(RadioControlData.press_norm);
+    //Serial.print(", press_hg: "); Serial.print(RadioControlData.press_hg);
+    //Serial.print(", temp: "); Serial.print(RadioControlData.temp);
+    printf("\n"); 
 }
