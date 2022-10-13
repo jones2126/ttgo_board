@@ -17,6 +17,8 @@ ref: https://github.com/jgromes/RadioLib/wiki/Default-configuration#sx127xrfm9x-
 
 // include the library
 #include <RadioLib.h>
+#include <ESP32Servo.h>
+
 
 // functions below loop() - required to tell VSCode compiler to look for them below.  Not required when using Arduino IDE
 void startSerial();
@@ -27,7 +29,10 @@ void handleIncomingMsg();
 void print_Info_messages();
 double computePID(float inp);
 void steerVehicle();
+void throttleVehicle();
 float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
+void eStopRoutine();
+void transmissionServoSetup();
 
 // radio related
 float FREQUENCY = 915.0;  // MHz - EU 433.5; US 915.0
@@ -39,7 +44,7 @@ float F_OFFSET = 1250 / 1e6;  // Hz - optional if you want to offset the frequen
 int8_t POWER = 15;  // 2 - 20dBm
 SX1276 radio = new Module(18, 26, 14, 33);  // Module(CS, DI0, RST, ??); - Module(18, 26, 14, 33);
 
-int led = 2;
+
 
 struct RadioControlStruct{
   float steering_val;
@@ -72,23 +77,27 @@ const long readingInterval = 100;
 const long transmitInterval = 500;
 const long infoInterval = 2000;
 const long steerInterval = 50;  // 100 10 HZ, 50 20Hz, 20 = 50 Hz
+const long throttleInterval = 1000;
 unsigned long prev_time_reading = 0;
 unsigned long prev_time_xmit = 0;
 unsigned long prev_time_printinfo = 0;
 unsigned long prev_time_steer = 0;
+unsigned long prev_time_throttle = 0;
 /////////////////////////////////////////////////////////////////
 
 ///////////////////Steering variables///////////////////////
+//pot values left: straight:1880; right:
 float safety_margin_pot = 400; // reduce this once I complete field testing
-float left_limit_pot = 3499 - safety_margin_pot;  // the actual extreme limit is 3499
+float left_limit_pot = 3245 - safety_margin_pot;  // the actual extreme limit is 3245
 float left_limit_angle = -45; // this is a guess - change based on field testing
-float right_limit_pot = 431 + safety_margin_pot;  // the actual extreme limit is 431
+float right_limit_pot = 470 + safety_margin_pot;  // the actual extreme limit is 470
 float right_limit_angle = 45;  // this is a guess - change based on field testing
 float steering_target_angle = 0;
 float steering_target_pot = 0;
 float steering_actual_angle = 0;
 float steering_actual_pot = 0;
-float steer_effort = 0;
+float steer_effort_float = 0;
+int steer_effort = 0;
 float tolerance = 0.4;  // need to adjust this based on angles
 const int motor_power_limit = 150;
 /////////////////////////////////////////////////////////////
@@ -106,29 +115,52 @@ float cumError, rateError;
 ///////////////////////////////////////////////////////
 
 ///////////////////////Inputs/outputs///////////////////////
+int transmissionPowerPin = 22;
+int estop_pin = 23;
+int led = 2;
+int transmissionSignalPin = 17;
+int servopin = 36;  // analog pin used to connect the transmission servo
 int steer_angle_pin = 38;   // pin for steer angle sensor
 int PWMPin = 25;
 int DIRPin = 12;
 int ledState = LOW;         // ledState used to set the LED
-//variables for testing to the right and back again
 int test_sw = 0;  // turn the wheel all the way to the left before starting this test
 unsigned long test_start_time = 0; 
 float test_duration = 0;
 ///////////////////////////////////////////////////////////
 
-
+  // setup servo for throttle
+  //Using “myservo.write(val);”  - 60=reverse; 73=neutral; 92=first
+Servo transmissionServo;  // create servo object to control a servo 
+//Servo CytronServo;  // create servo object to control a servo  
+//myservo.attach(transmissionSignalPin);  // attaches the servo on pin 9 to the servo object
+int transmissionNeutralPos = 73;
+int transmissionServoValue = transmissionNeutralPos;  // neutral position
+int tranmissioPotValue = 0; // incoming throttle setting
 
 void setup() {
   pinMode(steer_angle_pin,INPUT);
   pinMode(PWMPin, OUTPUT);
-  pinMode(DIRPin, OUTPUT);  
+  pinMode(DIRPin, OUTPUT);
+  pinMode(estop_pin, OUTPUT);
+  transmissionServoSetup();
   startSerial();
   InitLoRa();
+}
+void transmissionServoSetup(){
+  pinMode(transmissionPowerPin, OUTPUT);
+	ESP32PWM::allocateTimer(0);  	// Allow allocation of all timers
+	ESP32PWM::allocateTimer(1);
+	ESP32PWM::allocateTimer(2);
+	ESP32PWM::allocateTimer(3);
+	transmissionServo.setPeriodHertz(50);    // standard 50 hz servo
+	transmissionServo.attach(transmissionSignalPin, 500, 2400); // attaches the servo on pin 18 to the servo object   
 }
 void loop() {
     unsigned long currentMillis = millis();
     handleIncomingMsg();
     if ((currentMillis - prev_time_steer)      >= steerInterval)     {steerVehicle();}
+    if ((currentMillis - prev_time_throttle)   >= throttleInterval)  {throttleVehicle();}    
     if ((currentMillis - prev_time_reading)    >= readingInterval)   {getTractorData();}
     if ((currentMillis - prev_time_xmit)       >= transmitInterval)  {sendOutgoingMsg();}
     if ((currentMillis - prev_time_printinfo)  >= infoInterval)      {print_Info_messages();}       
@@ -140,11 +172,8 @@ void startSerial(){
   }
   delay(7000);
   Serial.println("starting: radio_control_tractor_v1");
-
 }
-void InitLoRa(){
-
-// initialize SX1276 with default settings
+void InitLoRa(){ // initialize SX1276 with default settings
   Serial.print(F("[SX1276] Initializing ... "));
   int state = radio.begin();
   if (state == RADIOLIB_ERR_NONE) {  
@@ -196,7 +225,7 @@ void InitLoRa(){
 
   delay(10000); 
 }
-void getTractorData(){
+void getTractorData(){  // just using placeholders for now
   TractorData.speed = 255;
   TractorData.heading = 359.9;
   TractorData.voltage = 12.8;
@@ -258,40 +287,33 @@ void print_Info_messages(){
     //Serial.print(F(", dB"));
     //Serial.print(F(", Freq error: ")); Serial.print(radio.getFrequencyError());  
     //Serial.print(F(", Hz"));
-    Serial.print(", steering: "); Serial.print(RadioControlData.steering_val);
-    //Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
+    //Serial.print(", steering: "); Serial.print(RadioControlData.steering_val);
+    Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
+    Serial.print(", throttle-mapped: "); Serial.print(transmissionServoValue);    
+    //transmissionServoValue
     //Serial.print(", press_norm: "); Serial.print(RadioControlData.press_norm);
     //Serial.print(", press_hg: "); Serial.print(RadioControlData.press_hg);
     //Serial.print(", temp: "); Serial.print(RadioControlData.temp);
     //setPoint
-    Serial.print(", setPoint: "); Serial.print(setPoint);
-    Serial.print(", steering_actual_angle: "); Serial.print(steering_actual_angle);
-    Serial.print(", error: "); Serial.print(error);
-    Serial.print(", steer effort: "); Serial.print(steer_effort);
+    //Serial.print(", setPoint: "); Serial.print(setPoint);
+    //Serial.print(", steering_actual_angle: "); Serial.print(steering_actual_angle);
+    //Serial.print(", error: "); Serial.print(error);
+    //Serial.print(", steer effort: "); Serial.print(steer_effort);
+    //Serial.print(", Ki: "); Serial.print(ki, 5);
+    Serial.print(", steer pot: "); Serial.print(analogRead(steer_angle_pin)); 
     printf("\n"); 
 }
 void steerVehicle(){
-  /*
-    steering_actual_pot = get_angle(1);
-    steering_target_pot = analogRead(target_pot_pin);
-    steering_target_angle = mapfloat(steering_target_pot, 0, 4095, left_limit_angle, right_limit_angle);
-    setPoint = steering_target_angle;   
-  */
-    steering_actual_pot=analogRead(steer_angle_pin); 
-    //kp = 16; ki = 0.00; kd = 0;
-    kp = 16; ki = 0.0079; kd = 2468;
-    /*
-    steering_target_pot = analogRead(target_pot_pin);
-    steering_target_angle = mapfloat(steering_target_pot, 0, 4095, left_limit_angle, right_limit_angle);
-    setPoint = steering_target_angle; 
-*/    
+    ki = 0.00013;
+    kp=3.6; kd=850;
+    //kp = 16; ki = 0.0079; kd = 2468;
+    //ki = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 0.005);
     setPoint = RadioControlData.steering_val;
     //Serial.print("e: "); Serial.println(error); 
-    /* The next statement is used to convert the analog potentiometer value to an angle, based on the steering 
-    characteristics of the vehicle. */
+    steering_actual_pot=analogRead(steer_angle_pin); 
     steering_actual_angle = mapfloat(steering_actual_pot, left_limit_pot, right_limit_pot, left_limit_angle, right_limit_angle);
-    steer_effort = computePID(steering_actual_angle);
-
+    steer_effort_float = computePID(steering_actual_angle);
+    steer_effort = steer_effort_float;
    /*  Safety clamp:  The max_power_limit could be as high as 255 which 
     would deliver 12+ volts to the steer motor.  I have reduced the highest setting that allows the wheels
     to be moved easily while sitting on concrete (e.g. motor_power_limit = 150 )  */
@@ -299,26 +321,36 @@ void steerVehicle(){
     if (steer_effort > motor_power_limit){steer_effort = motor_power_limit;} // motor_power_limit
    
     if(error > tolerance){     
-        //Serial.print("e-r: "); Serial.print(error);  
-        //Serial.print("s-r: "); Serial.println(steer_effort);                 
+        Serial.print("e-r: "); Serial.print(error);  
+        Serial.print("s-r: "); Serial.println(steer_effort);                 
         digitalWrite(DIRPin, HIGH);   // steer right - channel B led is lit; Red wire (+) to motor; positive voltage
-        if ((steering_actual_pot > left_limit_pot) || (steering_actual_pot < right_limit_pot)) {steer_effort = 0;}  // safety check
+        //if ((steering_actual_pot > left_limit_pot) || (steering_actual_pot < right_limit_pot)) {steer_effort = 0;}  // safety check
         analogWrite(PWMPin, steer_effort);
         } 
 
     else if(error < (tolerance*-1)){   
-        //Serial.print("e-l: "); Serial.print(error); 
-        //Serial.print("s-l: "); Serial.println(steer_effort);   
+        Serial.print("e-l: "); Serial.print(error); 
+        Serial.print("s-l: "); Serial.println(steer_effort);   
         digitalWrite(DIRPin, LOW); // steer left - channel A led is lit; black wire (-) to motor; negative voltage
-        if ((steering_actual_pot > left_limit_pot) || (steering_actual_pot < right_limit_pot)) {steer_effort = 0;}  // safety check
+        //if ((steering_actual_pot > left_limit_pot) || (steering_actual_pot < right_limit_pot)) {steer_effort = 0;}  // safety check
         analogWrite(PWMPin, abs(steer_effort));
         }
     else {
         steer_effort = 0;
-        analogWrite(PWMPin, steer_effort);       // Turn the motor off  
+        //analogWrite(PWMPin, steer_effort);       // Turn the motor off  
         }    
     prev_time_steer = millis();
 }  // end of steerVehicle
+void throttleVehicle(){
+    //tranmissioPotValue = analogRead(potpin);  // change to   get the data from the LoRo packet
+    //transmissionServoValue = map(potval, 0, max_pot_value, 0, 180);     // scale it to use it with the servo (value between 0 and 180)
+    transmissionServoValue = map(RadioControlData.throttle_val, 0, 4095, 60, 92);    // - 60=reverse; 73=neutral; 92=first
+    digitalWrite(transmissionPowerPin, LOW);   // turn power on to transmission servo
+    //transmissionServoValue = transmissionNeutralPos;  // neutral
+    transmissionServo.write(transmissionServoValue);                  // sets the servo position according to the scaled value
+    Serial.print("pot val-original: "); Serial.print(tranmissioPotValue);
+    Serial.print(", pot val-mapped: "); Serial.println(transmissionServoValue);
+}
 double computePID(float inp){     
   // ref: https://www.teachmemicro.com/arduino-pid-control-tutorial/
       currentTime = millis();                                     // get current time
@@ -333,4 +365,10 @@ double computePID(float inp){
 }
 float mapfloat(float x, float in_min, float in_max, float out_min, float out_max){
   return (x - in_min)*(out_max - out_min) / (in_max - in_min) + out_min;
+}
+void eStopRoutine(){
+    digitalWrite(transmissionPowerPin, LOW);   // make sure power is on to transmission servo
+    transmissionServo.write(transmissionNeutralPos);
+    delay(500);
+    digitalWrite(transmissionPowerPin, HIGH);   // turn power on to transmission servo 
 }
