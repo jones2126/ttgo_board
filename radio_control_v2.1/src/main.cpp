@@ -94,6 +94,9 @@ char *throttle_val_ROS;
 int switch_mode;
 int voltage_val = 0;
 
+// estop 
+byte buttonState;
+#define ESTOP_PIN 25  
 
 // used classifying results
 #define arraySize 10 // size of array a
@@ -137,11 +140,12 @@ unsigned long prev_time_radio_signal = 0;
 
 /////////////////////// data structures ///////////////////////
 struct RadioControlStruct{
-  float steering_val;
-  float throttle_val;
-  float press_norm ; 
-  float humidity;
-  float TempF;
+  float         steering_val;
+  float         throttle_val;
+  float         press_norm; 
+  float         humidity;
+  float         TempF;
+  byte          estop;
   unsigned long counter;
   }RadioControlData;
 uint8_t RadioControlData_message_len = sizeof(RadioControlData);
@@ -167,6 +171,7 @@ CRGB leds[NUM_LEDS];
 // int sensor_value = -99;
 void setup(){
   pinMode(led, OUTPUT);
+  pinMode(ESTOP_PIN, INPUT_PULLUP);
   startSerial();
   initLEDs();
   InitLoRa();
@@ -176,10 +181,10 @@ void setup(){
 void loop(){
   unsigned long currentMillis = millis();
   handleIncomingMsg();
-  if ((currentMillis - prev_time_reading)   >= readingInterval)   {getControlReadings();}
-  if ((currentMillis - prev_time_weather)    >= weatherInterval)  {getWeatherReadings();}
-  if ((currentMillis - prev_time_xmit)       >= transmitInterval) {sendOutgoingMsg();}
-  if ((currentMillis - prev_time_OLED)       >= OLEDInterval)     {displayOLED();}
+  if ((currentMillis - prev_time_reading)     >= readingInterval)   {getControlReadings();}
+  if ((currentMillis - prev_time_weather)     >= weatherInterval)   {getWeatherReadings();}
+  if ((currentMillis - prev_time_xmit)        >= transmitInterval)  {sendOutgoingMsg();}
+  if ((currentMillis - prev_time_OLED)        >= OLEDInterval)      {displayOLED();}
  // if ((currentMillis - prev_time_printinfo)  >= infoInterval)     {print_Info_messages();}     
 }
 void startSerial(){
@@ -249,14 +254,16 @@ void InitLoRa(){
   delay(2000); 
 }
 void getControlReadings(){
-  throttle_val = analogRead(POT_X);
-  return_test = classifyRange(ThrottlePts, throttle_val); 
-  RadioControlData.throttle_val = ThrottleValues[return_test];
-  steering_val = analogRead(POT_Y);
-  return_test = classifyRange(SteeeringPts, steering_val); 
-  RadioControlData.steering_val = SteeeringValues[return_test];
-  //RadioControlData.steering_val = steering_val_ROS; 
-  voltage_val = analogRead(voltage_pin);  
+    throttle_val = analogRead(POT_X);
+    //return_test = classifyRange(ThrottlePts, throttle_val); 
+    //RadioControlData.throttle_val = ThrottleValues[return_test];
+    RadioControlData.throttle_val = throttle_val;
+    steering_val = analogRead(POT_Y);
+    return_test = classifyRange(SteeeringPts, steering_val); 
+    RadioControlData.steering_val = SteeeringValues[return_test];
+    //RadioControlData.steering_val = steering_val_ROS; 
+    voltage_val = analogRead(voltage_pin);
+    RadioControlData.estop = digitalRead(ESTOP_PIN);  //LOW = 0 side; HIGH = middle
 }
 void getWeatherReadings(){
     //light_val = analogRead(light_sensor);  // currently do not have one installed
@@ -421,18 +428,14 @@ void print_Info_messages(){
     //Serial.print(F(", POT X: "));  Serial.print(throttle_val);
     //Serial.print(F(", steering: "));  Serial.print(RadioControlData.steering_val);     
     //Serial.print(F(", POT Y: "));  Serial.print(steering_val);
-    // Serial.print(F(", steering_val_ROS: "));  Serial.print(steering_val_ROS);
+    //Serial.print(F(", steering_val_ROS: "));  Serial.print(steering_val_ROS);
     //Serial.print("Temp *C = "); Serial.print(temperature);
     //Serial.print(", Temp *F = "); Serial.print(TempF);  // Convert temperature to Fahrenheit
     //Serial.print("Pressure (hPa) = "); Serial.print(pressure);
     //Serial.print("Approx. Altitude (m) = "); Serial.print(altitude);
     //Serial.print(", Humidity = "); Serial.print(humidity); Serial.println(" % ");
     Serial.print(", RadioControlData.counter: "); Serial.print(RadioControlData.counter);
-
     //printf("\n");   
-
-
-
     printf("\n");
     printf("\n");     
     //Serial.print(F("[SX1278] RSSI:\t\t\t"));  Serial.print(RSSI);  Serial.println(F(" dBm"));

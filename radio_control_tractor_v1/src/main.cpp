@@ -154,6 +154,8 @@ void getTractorData(){
 void sendOutgoingMsg(){
     digitalWrite(led, HIGH);
     Serial.print(F(", xmit"));
+    // if estop = 1, set flag to 1 otherwise set flag to 0;  estop is on pin 25
+
     memcpy(tx_TractorData_buf, &TractorData, TractorData_message_len);
     int state = radio.transmit(tx_TractorData_buf, TractorData_message_len);
     if (state == RADIOLIB_ERR_NONE) {
