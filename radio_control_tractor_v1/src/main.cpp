@@ -289,23 +289,21 @@ void print_Info_messages(){
     //Serial.print(F(" bps"));
     //Serial.println(F("packet received!"));
     // print the RSSI (Received Signal Strength Indicator) of the last received packet
-    //Serial.print(F(", RSSI: "));  Serial.print(radio.getRSSI());  
-    //Serial.print(F(", SNR: "));  Serial.print(radio.getSNR());  
+    //Serial.print(F(", RSSI: "));  Serial.print(radio.getRSSI());
+    //Serial.print(F(", SNR: "));  Serial.print(radio.getSNR());
     //Serial.print(F(", dB"));
-    //Serial.print(F(", Freq error: ")); Serial.print(radio.getFrequencyError());  
+    //Serial.print(F(", Freq error: ")); Serial.print(radio.getFrequencyError());
     //Serial.print(F(", Hz"));
     //Serial.print(", steering: "); Serial.print(RadioControlData.steering_val);
-    Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
-    Serial.print(", throttle-mapped: "); Serial.print(transmissionServoValue);    
-    //transmissionServoValue
+    //Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
+    //Serial.print(", throttle-mapped: "); Serial.print(transmissionServoValue);
     //Serial.print(", press_norm: "); Serial.print(RadioControlData.press_norm);
     //Serial.print(", press_hg: "); Serial.print(RadioControlData.press_hg);
     //Serial.print(", temp: "); Serial.print(RadioControlData.temp);
-    //setPoint
-    //Serial.print(", setPoint: "); Serial.print(setPoint);
-    //Serial.print(", steering_actual_angle: "); Serial.print(steering_actual_angle);
+    Serial.print(", setPoint: "); Serial.print(setPoint);
+    Serial.print(", steering_actual_angle: "); Serial.print(steering_actual_angle);
     //Serial.print(", error: "); Serial.print(error);
-    //Serial.print(", steer effort: "); Serial.print(steer_effort);
+    Serial.print(", steer effort: "); Serial.print(steer_effort);
     //Serial.print(", Ki: "); Serial.print(ki, 5);
     Serial.print(", steer pot: "); Serial.print(analogRead(steer_angle_pin)); 
     printf("\n"); 
@@ -355,8 +353,8 @@ void throttleVehicle(){
     digitalWrite(transmissionPowerPin, LOW);   // turn power on to transmission servo
     //transmissionServoValue = transmissionNeutralPos;  // neutral
     transmissionServo.write(transmissionServoValue);                  // sets the servo position according to the scaled value
-    Serial.print("pot val-original: "); Serial.print(tranmissioPotValue);
-    Serial.print(", pot val-mapped: "); Serial.println(transmissionServoValue);
+    //Serial.print("pot val-original: "); Serial.print(tranmissioPotValue);
+    //Serial.print(", pot val-mapped: "); Serial.println(transmissionServoValue);
 }
 double computePID(float inp){     
   // ref: https://www.teachmemicro.com/arduino-pid-control-tutorial/
