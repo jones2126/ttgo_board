@@ -280,9 +280,9 @@ void print_Info_messages(){
     //Serial.print("speed: "); Serial.print(TractorData.speed);
     //Serial.print("heading: "); Serial.print(TractorData.heading);
     //Serial.print("voltage: "); Serial.print(TractorData.voltage);
-    Serial.print("Tractr ctr: "); Serial.print(TractorData.counter);
+    //Serial.print("Tractr ctr: "); Serial.print(TractorData.counter);
     //Serial.print(", RC ctr: "); Serial.print(RadioControlData.counter);
-    Serial.print(", RC estop: "); Serial.print(RadioControlData.estop);         
+    //Serial.print(", RC estop: "); Serial.print(RadioControlData.estop);         
     // print measured data rate
     //Serial.print(F(", BPS "));
     //Serial.print(radio.getDataRate());
@@ -304,15 +304,18 @@ void print_Info_messages(){
     Serial.print(", steering_actual_angle: "); Serial.print(steering_actual_angle);
     //Serial.print(", error: "); Serial.print(error);
     Serial.print(", steer effort: "); Serial.print(steer_effort);
-    //Serial.print(", Ki: "); Serial.print(ki, 5);
+    Serial.print(", Ki: "); Serial.print(ki, 5);
     Serial.print(", steer pot: "); Serial.print(analogRead(steer_angle_pin)); 
     printf("\n"); 
 }
 void steerVehicle(){
-    ki = 0.00013;
-    kp=3.6; kd=850;
-    //kp = 16; ki = 0.0079; kd = 2468;
-    //ki = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 0.005);
+    kp=6.15; 
+    //kp = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 10);
+    //ki = 0.00013;
+    //ki = 0.0;
+    ki = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 0.0003);
+    kd=550;
+    //kd = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 2000);
     setPoint = RadioControlData.steering_val;
     //Serial.print("e: "); Serial.println(error); 
     steering_actual_pot=analogRead(steer_angle_pin); 
