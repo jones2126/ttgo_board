@@ -47,11 +47,12 @@ SX1276 radio = new Module(18, 26, 14, 33);  // Module(CS, DI0, RST, ??); - Modul
 
 
 struct RadioControlStruct{
-  float steering_val;
-  float  throttle_val;
-  float press_norm ; 
-  float press_hg;
-  float temp;
+  float         steering_val;
+  float         throttle_val;
+  float         press_norm; 
+  float         humidity;
+  float         TempF;
+  byte          estop;
   unsigned long counter;
   }RadioControlData;
 
@@ -116,7 +117,7 @@ float cumError, rateError;
 
 ///////////////////////Inputs/outputs///////////////////////
 int transmissionPowerPin = 22;
-int estop_pin = 23;
+int estopRelay_pin = 23;
 int led = 2;
 int transmissionSignalPin = 17;
 int servopin = 36;  // analog pin used to connect the transmission servo
@@ -142,7 +143,7 @@ void setup() {
   pinMode(steer_angle_pin,INPUT);
   pinMode(PWMPin, OUTPUT);
   pinMode(DIRPin, OUTPUT);
-  pinMode(estop_pin, OUTPUT);
+  pinMode(estopRelay_pin, OUTPUT);
   transmissionServoSetup();
   startSerial();
   InitLoRa();
@@ -257,7 +258,12 @@ void handleIncomingMsg(){
     int state = radio.receive(tx_RadioControlData_buf, RadioControlData_message_len);
     //Serial.print(F("state (")); Serial.print(state); Serial.println(F(")"));
     if (state == RADIOLIB_ERR_NONE) {        // packet was successfully received
-      memcpy(&RadioControlData, tx_RadioControlData_buf, RadioControlData_message_len);
+      memcpy(&RadioControlData, tx_RadioControlData_buf, RadioControlData_message_len); 
+      if (RadioControlData.estop == 0) {
+          eStopRoutine();
+          } else {
+            digitalWrite(estopRelay_pin, HIGH); 
+          }
       digitalWrite(led, HIGH);
       } else if (state == RADIOLIB_ERR_RX_TIMEOUT) {   // timeout occurred while waiting for a packet
             Serial.print(F("waiting..."));
@@ -275,7 +281,8 @@ void print_Info_messages(){
     //Serial.print("heading: "); Serial.print(TractorData.heading);
     //Serial.print("voltage: "); Serial.print(TractorData.voltage);
     Serial.print("Tractr ctr: "); Serial.print(TractorData.counter);
-    //Serial.print(", RC ctr: "); Serial.print(RadioControlData.counter);    
+    //Serial.print(", RC ctr: "); Serial.print(RadioControlData.counter);
+    Serial.print(", RC estop: "); Serial.print(RadioControlData.estop);         
     // print measured data rate
     //Serial.print(F(", BPS "));
     //Serial.print(radio.getDataRate());
@@ -367,8 +374,9 @@ float mapfloat(float x, float in_min, float in_max, float out_min, float out_max
   return (x - in_min)*(out_max - out_min) / (in_max - in_min) + out_min;
 }
 void eStopRoutine(){
+    digitalWrite(estopRelay_pin, LOW);   // turn the LED on (HIGH is the voltage level)   
     digitalWrite(transmissionPowerPin, LOW);   // make sure power is on to transmission servo
     transmissionServo.write(transmissionNeutralPos);
     delay(500);
-    digitalWrite(transmissionPowerPin, HIGH);   // turn power on to transmission servo 
+    digitalWrite(transmissionPowerPin, HIGH);   // turn power on to transmission servo
 }
