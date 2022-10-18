@@ -196,23 +196,103 @@ void print_Info_messages(){
     //Serial.print("speed: "); Serial.print(TractorData.speed);
     //Serial.print("heading: "); Serial.print(TractorData.heading);
     //Serial.print("voltage: "); Serial.print(TractorData.voltage);
-    Serial.print("Tractr ctr: "); Serial.print(TractorData.counter);
-    Serial.print(", RC ctr: "); Serial.print(RadioControlData.counter);    
+    //Serial.print("Tractr ctr: "); Serial.print(TractorData.counter);
+    //Serial.print(", RC ctr: "); Serial.print(RadioControlData.counter);
+    //Serial.print(", RC estop: "); Serial.print(RadioControlData.estop);         
     // print measured data rate
     Serial.print(F(", BPS "));
     Serial.print(radio.getDataRate());
     //Serial.print(F(" bps"));
     //Serial.println(F("packet received!"));
     // print the RSSI (Received Signal Strength Indicator) of the last received packet
-    Serial.print(F(", RSSI: "));  Serial.print(radio.getRSSI());  
+    //Serial.print(F(", RSSI: "));  Serial.print(radio.getRSSI());  
     //Serial.print(F(", SNR: "));  Serial.print(radio.getSNR());  
     //Serial.print(F(", dB"));
-    //Serial.print(F(", Freq error: ")); Serial.print(radio.getFrequencyError());  
+    //Serial.print(F(", Freq error: ")); Serial.print(radio.getFrequencyError());
     //Serial.print(F(", Hz"));
-    Serial.print(", steering: "); Serial.print(RadioControlData.steering_val);
+    //Serial.print(", steering: "); Serial.print(RadioControlData.steering_val);
     Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
+    Serial.print(", throttle-mapped: "); Serial.print(transmissionServoValue);    
+    //transmissionServoValue
     //Serial.print(", press_norm: "); Serial.print(RadioControlData.press_norm);
     //Serial.print(", press_hg: "); Serial.print(RadioControlData.press_hg);
     //Serial.print(", temp: "); Serial.print(RadioControlData.temp);
+    //setPoint
+    //Serial.print(", setPoint: "); Serial.print(setPoint);
+    //Serial.print(", steering_actual_angle: "); Serial.print(steering_actual_angle);
+    //Serial.print(", error: "); Serial.print(error);
+    //Serial.print(", steer effort: "); Serial.print(steer_effort);
+    //Serial.print(", Ki: "); Serial.print(ki, 5);
+    Serial.print(", steer pot: "); Serial.print(analogRead(steer_angle_pin)); 
     printf("\n"); 
+}
+void steerVehicle(){
+    ki = 0.00013;
+    kp=3.6; kd=850;
+    //kp = 16; ki = 0.0079; kd = 2468;
+    //ki = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 0.005);
+    setPoint = RadioControlData.steering_val;
+    //Serial.print("e: "); Serial.println(error); 
+    steering_actual_pot=analogRead(steer_angle_pin); 
+    steering_actual_angle = mapfloat(steering_actual_pot, left_limit_pot, right_limit_pot, left_limit_angle, right_limit_angle);
+    steer_effort_float = computePID(steering_actual_angle);
+    steer_effort = steer_effort_float;
+   /*  Safety clamp:  The max_power_limit could be as high as 255 which 
+    would deliver 12+ volts to the steer motor.  I have reduced the highest setting that allows the wheels
+    to be moved easily while sitting on concrete (e.g. motor_power_limit = 150 )  */
+    if (steer_effort < (motor_power_limit*-1)){steer_effort = (motor_power_limit*-1);}  //clamp the values of steer_effort
+    if (steer_effort > motor_power_limit){steer_effort = motor_power_limit;} // motor_power_limit
+   
+    if(error > tolerance){     
+        Serial.print("e-r: "); Serial.print(error);  
+        Serial.print("s-r: "); Serial.println(steer_effort);                 
+        digitalWrite(DIRPin, HIGH);   // steer right - channel B led is lit; Red wire (+) to motor; positive voltage
+        //if ((steering_actual_pot > left_limit_pot) || (steering_actual_pot < right_limit_pot)) {steer_effort = 0;}  // safety check
+        analogWrite(PWMPin, steer_effort);
+        } 
+
+    else if(error < (tolerance*-1)){   
+        Serial.print("e-l: "); Serial.print(error); 
+        Serial.print("s-l: "); Serial.println(steer_effort);   
+        digitalWrite(DIRPin, LOW); // steer left - channel A led is lit; black wire (-) to motor; negative voltage
+        //if ((steering_actual_pot > left_limit_pot) || (steering_actual_pot < right_limit_pot)) {steer_effort = 0;}  // safety check
+        analogWrite(PWMPin, abs(steer_effort));
+        }
+    else {
+        steer_effort = 0;
+        //analogWrite(PWMPin, steer_effort);       // Turn the motor off  
+        }    
+    prev_time_steer = millis();
+}  // end of steerVehicle
+void throttleVehicle(){
+    //tranmissioPotValue = analogRead(potpin);  // change to   get the data from the LoRo packet
+    //transmissionServoValue = map(potval, 0, max_pot_value, 0, 180);     // scale it to use it with the servo (value between 0 and 180)
+    transmissionServoValue = map(RadioControlData.throttle_val, 0, 4095, 60, 92);    // - 60=reverse; 73=neutral; 92=first
+    digitalWrite(transmissionPowerPin, LOW);   // turn power on to transmission servo
+    //transmissionServoValue = transmissionNeutralPos;  // neutral
+    transmissionServo.write(transmissionServoValue);                  // sets the servo position according to the scaled value
+    Serial.print("pot val-original: "); Serial.print(tranmissioPotValue);
+    Serial.print(", pot val-mapped: "); Serial.println(transmissionServoValue);
+}
+double computePID(float inp){     
+  // ref: https://www.teachmemicro.com/arduino-pid-control-tutorial/
+      currentTime = millis();                                     // get current time
+      elapsedTime = (double)(currentTime - previousTime);         // compute time elapsed from previous computation
+      error = setPoint - inp;                                     // determine error
+      cumError += error * elapsedTime;                            // compute integral
+      rateError = (error - lastError)/elapsedTime;                // compute derivative
+      float out = ((kp*error) + (ki*cumError) + (kd*rateError)); // PID output               
+      lastError = error;                                          // remember current error
+      previousTime = currentTime;                                 // remember current time
+      return out;                                                 // have function return the PID output
+}
+float mapfloat(float x, float in_min, float in_max, float out_min, float out_max){
+  return (x - in_min)*(out_max - out_min) / (in_max - in_min) + out_min;
+}
+void eStopRoutine(){
+    digitalWrite(estopRelay_pin, LOW);   // turn the LED on (HIGH is the voltage level)   
+    digitalWrite(transmissionPowerPin, LOW);   // make sure power is on to transmission servo
+    transmissionServo.write(transmissionNeutralPos);
+    delay(500);
+    digitalWrite(transmissionPowerPin, HIGH);   // turn power on to transmission servo
 }
