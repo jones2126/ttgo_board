@@ -295,17 +295,17 @@ void print_Info_messages(){
     //Serial.print(F(", Freq error: ")); Serial.print(radio.getFrequencyError());
     //Serial.print(F(", Hz"));
     //Serial.print(", steering: "); Serial.print(RadioControlData.steering_val);
-    //Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
-    //Serial.print(", throttle-mapped: "); Serial.print(transmissionServoValue);
+    Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
+    Serial.print(", throttle-mapped: "); Serial.print(transmissionServoValue);
     //Serial.print(", press_norm: "); Serial.print(RadioControlData.press_norm);
     //Serial.print(", press_hg: "); Serial.print(RadioControlData.press_hg);
     //Serial.print(", temp: "); Serial.print(RadioControlData.temp);
-    Serial.print(", setPoint: "); Serial.print(setPoint);
-    Serial.print(", steering_actual_angle: "); Serial.print(steering_actual_angle);
+    //Serial.print(", setPoint: "); Serial.print(setPoint);
+    //Serial.print(", steering_actual_angle: "); Serial.print(steering_actual_angle);
     //Serial.print(", error: "); Serial.print(error);
-    Serial.print(", steer effort: "); Serial.print(steer_effort);
-    Serial.print(", Ki: "); Serial.print(ki, 5);
-    Serial.print(", steer pot: "); Serial.print(analogRead(steer_angle_pin)); 
+    //Serial.print(", steer effort: "); Serial.print(steer_effort);
+    //Serial.print(", Ki: "); Serial.print(ki, 5);
+    //Serial.print(", steer pot: "); Serial.print(analogRead(steer_angle_pin)); 
     printf("\n"); 
 }
 void steerVehicle(){
@@ -328,16 +328,16 @@ void steerVehicle(){
     if (steer_effort > motor_power_limit){steer_effort = motor_power_limit;} // motor_power_limit
    
     if(error > tolerance){     
-        Serial.print("e-r: "); Serial.print(error);  
-        Serial.print("s-r: "); Serial.println(steer_effort);                 
+        //Serial.print("e-r: "); Serial.print(error);  
+        //Serial.print("s-r: "); Serial.println(steer_effort);                 
         digitalWrite(DIRPin, HIGH);   // steer right - channel B led is lit; Red wire (+) to motor; positive voltage
         //if ((steering_actual_pot > left_limit_pot) || (steering_actual_pot < right_limit_pot)) {steer_effort = 0;}  // safety check
         analogWrite(PWMPin, steer_effort);
         } 
 
     else if(error < (tolerance*-1)){   
-        Serial.print("e-l: "); Serial.print(error); 
-        Serial.print("s-l: "); Serial.println(steer_effort);   
+        //Serial.print("e-l: "); Serial.print(error); 
+        //Serial.print("s-l: "); Serial.println(steer_effort);   
         digitalWrite(DIRPin, LOW); // steer left - channel A led is lit; black wire (-) to motor; negative voltage
         //if ((steering_actual_pot > left_limit_pot) || (steering_actual_pot < right_limit_pot)) {steer_effort = 0;}  // safety check
         analogWrite(PWMPin, abs(steer_effort));
@@ -351,7 +351,7 @@ void steerVehicle(){
 void throttleVehicle(){
     //tranmissioPotValue = analogRead(potpin);  // change to   get the data from the LoRo packet
     //transmissionServoValue = map(potval, 0, max_pot_value, 0, 180);     // scale it to use it with the servo (value between 0 and 180)
-    transmissionServoValue = map(RadioControlData.throttle_val, 0, 4095, 60, 92);    // - 60=reverse; 73=neutral; 92=first
+    transmissionServoValue = map(RadioControlData.throttle_val, 0, 4095, 50, 100);    // - 60=reverse; 73=neutral; 92=first
     digitalWrite(transmissionPowerPin, LOW);   // turn power on to transmission servo
     //transmissionServoValue = transmissionNeutralPos;  // neutral
     transmissionServo.write(transmissionServoValue);                  // sets the servo position according to the scaled value
