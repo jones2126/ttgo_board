@@ -17,6 +17,8 @@ ref: https://github.com/jgromes/RadioLib/wiki/Default-configuration#sx127xrfm9x-
 
 // include the library
 #include <RadioLib.h>
+#include <ESP32Servo.h>
+
 
 // functions below loop() - required to tell VSCode compiler to look for them below.  Not required when using Arduino IDE
 void startSerial();
@@ -25,6 +27,12 @@ void getTractorData();
 void sendOutgoingMsg();
 void handleIncomingMsg();
 void print_Info_messages();
+double computePID(float inp);
+void steerVehicle();
+void throttleVehicle();
+float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
+void eStopRoutine();
+void transmissionServoSetup();
 
 // radio related
 float FREQUENCY = 915.0;  // MHz - EU 433.5; US 915.0
@@ -36,14 +44,15 @@ float F_OFFSET = 1250 / 1e6;  // Hz - optional if you want to offset the frequen
 int8_t POWER = 15;  // 2 - 20dBm
 SX1276 radio = new Module(18, 26, 14, 33);  // Module(CS, DI0, RST, ??); - Module(18, 26, 14, 33);
 
-int led = 2;
+
 
 struct RadioControlStruct{
-  float steering_val;
-  float  throttle_val;
-  float press_norm ; 
-  float press_hg;
-  float temp;
+  float         steering_val;
+  float         throttle_val;
+  float         press_norm; 
+  float         humidity;
+  float         TempF;
+  byte          estop;
   unsigned long counter;
   }RadioControlData;
 
@@ -68,32 +77,104 @@ uint8_t tx_TractorData_buf[sizeof(TractorData)] = {0};
 const long readingInterval = 100;
 const long transmitInterval = 500;
 const long infoInterval = 2000;
+const long steerInterval = 50;  // 100 10 HZ, 50 20Hz, 20 = 50 Hz
+const long throttleInterval = 1000;
 unsigned long prev_time_reading = 0;
 unsigned long prev_time_xmit = 0;
 unsigned long prev_time_printinfo = 0;
+unsigned long prev_time_steer = 0;
+unsigned long prev_time_throttle = 0;
 /////////////////////////////////////////////////////////////////
 
+///////////////////Steering variables///////////////////////
+//pot values left: straight:1880; right:
+float safety_margin_pot = 400; // reduce this once I complete field testing
+float left_limit_pot = 3245 - safety_margin_pot;  // the actual extreme limit is 3245
+float left_limit_angle = -45; // this is a guess - change based on field testing
+float right_limit_pot = 470 + safety_margin_pot;  // the actual extreme limit is 470
+float right_limit_angle = 45;  // this is a guess - change based on field testing
+float steering_target_angle = 0;
+float steering_target_pot = 0;
+float steering_actual_angle = 0;
+float steering_actual_pot = 0;
+float steer_effort_float = 0;
+int steer_effort = 0;
+float tolerance = 0.4;  // need to adjust this based on angles
+const int motor_power_limit = 150;
+/////////////////////////////////////////////////////////////
+
+/////////////////// PID variables ///////////////////////
+float kp=0; 
+float ki=0.0; 
+float kd=0; 
+unsigned long currentTime, previousTime;
+float elapsedTime;
+float error;
+float lastError;
+float output, setPoint;
+float cumError, rateError;
+///////////////////////////////////////////////////////
+
+///////////////////////Inputs/outputs///////////////////////
+int transmissionPowerPin = 22;
+int estopRelay_pin = 23;
+int led = 2;
+int transmissionSignalPin = 17;
+int servopin = 36;  // analog pin used to connect the transmission servo
+int steer_angle_pin = 38;   // pin for steer angle sensor
+int PWMPin = 25;
+int DIRPin = 12;
+int ledState = LOW;         // ledState used to set the LED
+int test_sw = 0;  // turn the wheel all the way to the left before starting this test
+unsigned long test_start_time = 0; 
+float test_duration = 0;
+///////////////////////////////////////////////////////////
+
+  // setup servo for throttle
+  //Using “myservo.write(val);”  - 60=reverse; 73=neutral; 92=first
+Servo transmissionServo;  // create servo object to control a servo 
+//Servo CytronServo;  // create servo object to control a servo  
+//myservo.attach(transmissionSignalPin);  // attaches the servo on pin 9 to the servo object
+int transmissionNeutralPos = 73;
+int transmissionServoValue = transmissionNeutralPos;  // neutral position
+int tranmissioPotValue = 0; // incoming throttle setting
+
 void setup() {
+  pinMode(steer_angle_pin,INPUT);
+  pinMode(PWMPin, OUTPUT);
+  pinMode(DIRPin, OUTPUT);
+  pinMode(estopRelay_pin, OUTPUT);
+  transmissionServoSetup();
   startSerial();
   InitLoRa();
+}
+void transmissionServoSetup(){
+  pinMode(transmissionPowerPin, OUTPUT);
+	ESP32PWM::allocateTimer(0);  	// Allow allocation of all timers
+	ESP32PWM::allocateTimer(1);
+	ESP32PWM::allocateTimer(2);
+	ESP32PWM::allocateTimer(3);
+	transmissionServo.setPeriodHertz(50);    // standard 50 hz servo
+	transmissionServo.attach(transmissionSignalPin, 500, 2400); // attaches the servo on pin 18 to the servo object   
 }
 void loop() {
     unsigned long currentMillis = millis();
     handleIncomingMsg();
-    if ((currentMillis - prev_time_reading) >= readingInterval)   {getTractorData();}
-    if ((currentMillis - prev_time_xmit)    >= transmitInterval)  {sendOutgoingMsg();}
-    if ((currentMillis - prev_time_printinfo)  >= infoInterval)   {print_Info_messages();}       
+    if ((currentMillis - prev_time_steer)      >= steerInterval)     {steerVehicle();}
+    if ((currentMillis - prev_time_throttle)   >= throttleInterval)  {throttleVehicle();}    
+    if ((currentMillis - prev_time_reading)    >= readingInterval)   {getTractorData();}
+    if ((currentMillis - prev_time_xmit)       >= transmitInterval)  {sendOutgoingMsg();}
+    if ((currentMillis - prev_time_printinfo)  >= infoInterval)      {print_Info_messages();}       
 }
 void startSerial(){
   Serial.begin(115200);
   while (!Serial) {
       delay(1000);   // loop forever and don't continue
   }
+  delay(7000);
   Serial.println("starting: radio_control_tractor_v1");
 }
-void InitLoRa(){
-
-// initialize SX1276 with default settings
+void InitLoRa(){ // initialize SX1276 with default settings
   Serial.print(F("[SX1276] Initializing ... "));
   int state = radio.begin();
   if (state == RADIOLIB_ERR_NONE) {  
@@ -145,7 +226,7 @@ void InitLoRa(){
 
   delay(10000); 
 }
-void getTractorData(){
+void getTractorData(){  // just using placeholders for now
   TractorData.speed = 255;
   TractorData.heading = 359.9;
   TractorData.voltage = 12.8;
@@ -153,9 +234,7 @@ void getTractorData(){
 }
 void sendOutgoingMsg(){
     digitalWrite(led, HIGH);
-    Serial.print(F(", xmit"));
-    // if estop = 1, set flag to 1 otherwise set flag to 0;  estop is on pin 25
-
+    //Serial.print(F(", xmit"));
     memcpy(tx_TractorData_buf, &TractorData, TractorData_message_len);
     int state = radio.transmit(tx_TractorData_buf, TractorData_message_len);
     if (state == RADIOLIB_ERR_NONE) {
@@ -179,7 +258,12 @@ void handleIncomingMsg(){
     int state = radio.receive(tx_RadioControlData_buf, RadioControlData_message_len);
     //Serial.print(F("state (")); Serial.print(state); Serial.println(F(")"));
     if (state == RADIOLIB_ERR_NONE) {        // packet was successfully received
-      memcpy(&RadioControlData, tx_RadioControlData_buf, RadioControlData_message_len);
+      memcpy(&RadioControlData, tx_RadioControlData_buf, RadioControlData_message_len); 
+      if (RadioControlData.estop == 0) {
+          eStopRoutine();
+          } else {
+            digitalWrite(estopRelay_pin, HIGH); 
+          }
       digitalWrite(led, HIGH);
       } else if (state == RADIOLIB_ERR_RX_TIMEOUT) {   // timeout occurred while waiting for a packet
             Serial.print(F("waiting..."));
@@ -200,37 +284,37 @@ void print_Info_messages(){
     //Serial.print(", RC ctr: "); Serial.print(RadioControlData.counter);
     //Serial.print(", RC estop: "); Serial.print(RadioControlData.estop);         
     // print measured data rate
-    Serial.print(F(", BPS "));
-    Serial.print(radio.getDataRate());
+    //Serial.print(F(", BPS "));
+    //Serial.print(radio.getDataRate());
     //Serial.print(F(" bps"));
     //Serial.println(F("packet received!"));
     // print the RSSI (Received Signal Strength Indicator) of the last received packet
-    //Serial.print(F(", RSSI: "));  Serial.print(radio.getRSSI());  
-    //Serial.print(F(", SNR: "));  Serial.print(radio.getSNR());  
+    //Serial.print(F(", RSSI: "));  Serial.print(radio.getRSSI());
+    //Serial.print(F(", SNR: "));  Serial.print(radio.getSNR());
     //Serial.print(F(", dB"));
     //Serial.print(F(", Freq error: ")); Serial.print(radio.getFrequencyError());
     //Serial.print(F(", Hz"));
     //Serial.print(", steering: "); Serial.print(RadioControlData.steering_val);
-    Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
-    Serial.print(", throttle-mapped: "); Serial.print(transmissionServoValue);    
-    //transmissionServoValue
+    //Serial.print(", throttle: "); Serial.print(RadioControlData.throttle_val);
+    //Serial.print(", throttle-mapped: "); Serial.print(transmissionServoValue);
     //Serial.print(", press_norm: "); Serial.print(RadioControlData.press_norm);
     //Serial.print(", press_hg: "); Serial.print(RadioControlData.press_hg);
     //Serial.print(", temp: "); Serial.print(RadioControlData.temp);
-    //setPoint
-    //Serial.print(", setPoint: "); Serial.print(setPoint);
-    //Serial.print(", steering_actual_angle: "); Serial.print(steering_actual_angle);
+    Serial.print(", setPoint: "); Serial.print(setPoint);
+    Serial.print(", steering_actual_angle: "); Serial.print(steering_actual_angle);
     //Serial.print(", error: "); Serial.print(error);
-    //Serial.print(", steer effort: "); Serial.print(steer_effort);
-    //Serial.print(", Ki: "); Serial.print(ki, 5);
+    Serial.print(", steer effort: "); Serial.print(steer_effort);
+    Serial.print(", Ki: "); Serial.print(ki, 5);
     Serial.print(", steer pot: "); Serial.print(analogRead(steer_angle_pin)); 
     printf("\n"); 
 }
 void steerVehicle(){
-    ki = 0.00013;
-    kp=3.6; kd=850;
-    //kp = 16; ki = 0.0079; kd = 2468;
-    //ki = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 0.005);
+    kp=6.15; 
+    ki = 0.00001;
+    kd=550;
+    //kp = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 10);
+    //ki = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 0.0003);    
+    //kd = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 2000);
     setPoint = RadioControlData.steering_val;
     //Serial.print("e: "); Serial.println(error); 
     steering_actual_pot=analogRead(steer_angle_pin); 
@@ -271,8 +355,8 @@ void throttleVehicle(){
     digitalWrite(transmissionPowerPin, LOW);   // turn power on to transmission servo
     //transmissionServoValue = transmissionNeutralPos;  // neutral
     transmissionServo.write(transmissionServoValue);                  // sets the servo position according to the scaled value
-    Serial.print("pot val-original: "); Serial.print(tranmissioPotValue);
-    Serial.print(", pot val-mapped: "); Serial.println(transmissionServoValue);
+    //Serial.print("pot val-original: "); Serial.print(tranmissioPotValue);
+    //Serial.print(", pot val-mapped: "); Serial.println(transmissionServoValue);
 }
 double computePID(float inp){     
   // ref: https://www.teachmemicro.com/arduino-pid-control-tutorial/
