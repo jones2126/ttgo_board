@@ -310,11 +310,10 @@ void print_Info_messages(){
 }
 void steerVehicle(){
     kp=6.15; 
-    //kp = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 10);
-    //ki = 0.00013;
-    //ki = 0.0;
-    ki = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 0.0003);
+    ki = 0.00001;
     kd=550;
+    //kp = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 10);
+    //ki = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 0.0003);    
     //kd = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 2000);
     setPoint = RadioControlData.steering_val;
     //Serial.print("e: "); Serial.println(error); 
