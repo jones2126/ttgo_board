@@ -120,7 +120,7 @@ int transmissionPowerPin = 22;
 int estopRelay_pin = 23;
 int led = 2;
 int transmissionSignalPin = 17;
-int servopin = 36;  // analog pin used to connect the transmission servo
+int kp_pot_pin = 39;  // analog pin used to connect the transmission servo
 int steer_angle_pin = 38;   // pin for steer angle sensor
 int PWMPin = 25;
 int DIRPin = 12;
@@ -141,6 +141,8 @@ int tranmissioPotValue = 0; // incoming throttle setting
 
 void setup() {
   pinMode(steer_angle_pin,INPUT);
+  pinMode(kp_pot_pin,INPUT);  // used for testing - read Kp from potentiometer
+  pinMode(37,INPUT);  // used for testing - read Kd from potentiometer
   pinMode(PWMPin, OUTPUT);
   pinMode(DIRPin, OUTPUT);
   pinMode(estopRelay_pin, OUTPUT);
@@ -304,17 +306,23 @@ void print_Info_messages(){
     //Serial.print(", steering_actual_angle: "); Serial.print(steering_actual_angle);
     //Serial.print(", error: "); Serial.print(error);
     //Serial.print(", steer effort: "); Serial.print(steer_effort);
+    Serial.print(", Kp: "); Serial.print(kp, 5);
     //Serial.print(", Ki: "); Serial.print(ki, 5);
+    Serial.print(", Kd: "); Serial.print(kd, 5);    
     //Serial.print(", steer pot: "); Serial.print(analogRead(steer_angle_pin)); 
+    Serial.print(", Kp pot: "); Serial.print(analogRead(kp_pot_pin)); 
     printf("\n"); 
 }
 void steerVehicle(){
-    kp=6.15; 
-    ki = 0.00001;
+    //kp=5.0; // previously 6.15
+    //ki = 0.00001;
+    ki = 0.00;    
     kd=550;
     //kp = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 10);
+    kp = mapfloat(analogRead(kp_pot_pin), 0, 4095, 0, 10);    
     //ki = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 0.0003);    
     //kd = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 2000);
+    kd = mapfloat(analogRead(37), 0, 4095, 0, 2000); 
     setPoint = RadioControlData.steering_val;
     //Serial.print("e: "); Serial.println(error); 
     steering_actual_pot=analogRead(steer_angle_pin); 
