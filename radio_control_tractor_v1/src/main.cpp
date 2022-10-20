@@ -302,22 +302,22 @@ void print_Info_messages(){
     //Serial.print(", press_norm: "); Serial.print(RadioControlData.press_norm);
     //Serial.print(", press_hg: "); Serial.print(RadioControlData.press_hg);
     //Serial.print(", temp: "); Serial.print(RadioControlData.temp);
-    //Serial.print(", setPoint: "); Serial.print(setPoint);
+    Serial.print(", setPoint: "); Serial.print(setPoint);
     //Serial.print(", steering_actual_angle: "); Serial.print(steering_actual_angle);
     //Serial.print(", error: "); Serial.print(error);
     //Serial.print(", steer effort: "); Serial.print(steer_effort);
-    Serial.print(", Kp: "); Serial.print(kp, 5);
+    Serial.print(", Kp: "); Serial.print(kp, 2);
     //Serial.print(", Ki: "); Serial.print(ki, 5);
-    Serial.print(", Kd: "); Serial.print(kd, 5);    
+    Serial.print(", Kd: "); Serial.print(kd, 2);    
     //Serial.print(", steer pot: "); Serial.print(analogRead(steer_angle_pin)); 
-    Serial.print(", Kp pot: "); Serial.print(analogRead(kp_pot_pin)); 
+    //Serial.print(", Kp pot: "); Serial.print(analogRead(kp_pot_pin)); 
     printf("\n"); 
 }
 void steerVehicle(){
     //kp=5.0; // previously 6.15
     //ki = 0.00001;
     ki = 0.00;    
-    kd=550;
+    //kd=550;
     //kp = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 10);
     kp = mapfloat(analogRead(kp_pot_pin), 0, 4095, 0, 10);    
     //ki = mapfloat(RadioControlData.throttle_val, 0, 4095, 0, 0.0003);    
